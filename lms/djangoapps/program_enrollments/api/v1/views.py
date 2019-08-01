@@ -12,6 +12,7 @@ from pytz import UTC
 from django.http import Http404
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
+from django.utils.functional import cached_property
 from edx_rest_framework_extensions import permissions
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from edx_rest_framework_extensions.auth.session.authentication import SessionAuthenticationAllowInactiveUser
@@ -567,7 +568,7 @@ class ProgramSpecificViewMixin(object):
     A mixin for views that operate on or within a specific program.
     """
 
-    @property
+    @cached_property
     def program(self):
         """
         The program specified by the `program_uuid` URL parameter.
@@ -576,6 +577,56 @@ class ProgramSpecificViewMixin(object):
         if program is None:
             raise Http404()
         return program
+
+    @staticmethod
+    def primary_active_curriculum(program):
+        """
+        Returns the first active curriculum in the given program, or None.
+        """
+        try:
+            return next(c for c in program.get('curricula', []) if c.get('is_active'))
+        except StopIteration:
+            return
+
+    @cached_property
+    def course_run_keys(self):
+        """
+        All of the course run keys associated with this program, either
+        via its ``curriculum`` field (looking at both the curriculum's courses
+        and child programs), or through the M2M ``courses`` field on the program.
+        """
+        keys = set()
+        for program in [self.program] + self.child_programs(self.program):
+            curriculum = self.primary_active_curriculum(program)
+            keys.update(self.course_runs_from_container(curriculum))
+            keys.update(self.course_runs_from_container(program))
+
+    @staticmethod
+    def course_runs_from_container(container):
+        """
+        Pluck nested course runs out of a ``container`` dictionary,
+        which is either the ``curriculum`` field of a program, or
+        a program itself (since either may contain a ``courses`` list).
+        """
+        return [
+            course_run.get('key')
+            for course in container.get('courses', [])
+            for course_run in course.get('course_runs', [])
+        ]
+
+    def child_programs(self, program):
+        """
+        Given a program, recursively find all child programs related
+        to this program through curricula.
+        """
+        curriculum = self.primary_active_curriculum(program)
+        if not curriculum:
+            return []
+        result = []
+        for child in curriculum.get('programs', []):
+            result.append(child)
+            result.extend(self.child_programs(child))
+        return result
 
 
 class ProgramCourseRunSpecificViewMixin(ProgramSpecificViewMixin):
@@ -1121,7 +1172,7 @@ class ProgramCourseEnrollmentOverviewView(DeveloperErrorViewMixin, ProgramSpecif
 
         Arguments:
             course_overview (CourseOverview): the overview for the course run
-            certificate_info: A dict containing the following keys - 
+            certificate_info: A dict containing the following keys:
                 ``is_passing``: whether the  user has a passing certificate in the course run
                 ``created``: the date the certificate was created
 

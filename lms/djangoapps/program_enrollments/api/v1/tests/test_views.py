@@ -5,6 +5,7 @@ from __future__ import absolute_import, unicode_literals
 
 from datetime import datetime, timedelta
 import json
+from unittest import TestCase
 from uuid import uuid4
 
 import ddt
@@ -31,6 +32,7 @@ from lms.djangoapps.program_enrollments.api.v1.constants import (
     ProgramEnrollmentResponseStatuses as ProgramStatuses,
     REQUEST_STUDENT_KEY,
 )
+from lms.djangoapps.program_enrollments.api.v1.views import ProgramSpecificViewMixin
 from lms.djangoapps.program_enrollments.tests.factories import ProgramCourseEnrollmentFactory, ProgramEnrollmentFactory
 from lms.djangoapps.program_enrollments.models import ProgramEnrollment, ProgramCourseEnrollment
 from lms.djangoapps.program_enrollments.utils import ProviderDoesNotExistException
@@ -1802,3 +1804,69 @@ class ProgramCourseEnrollmentOverviewViewTests(ProgramCacheTestCaseMixin, Shared
         response = self.client.get(self.get_url(self.program_uuid))
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertIn('micromasters_title', response.data['course_runs'][0])
+
+
+class TestProgramSpecificViewMixin(TestCase):
+    def setUp(self):
+        super(TestProgramSpecificViewMixin, self).setUp()
+        self.mixin = ProgramSpecificViewMixin()
+        self.grandchild_1 = {
+            'title': 'grandchild 1',
+            'curricula': [{'is_active': True, 'courses': [], 'programs': []}],
+        }
+        self.grandchild_2 = {
+            'title': 'grandchild 2',
+            'curricula': [{'is_active': True, 'courses': [], 'programs': []}],
+        }
+        self.grandchild_3 = {
+            'title': 'grandchild 3',
+            'curricula': [{'is_active': False}],
+        }
+        self.child_1 = {
+            'title': 'child 1',
+            'curricula': [{'is_active': True, 'courses': [], 'programs': [self.grandchild_1]}],
+        }
+        self.child_2 = {
+            'title': 'child 2',
+            'curricula': [{'is_active': True, 'courses': [], 'programs': [self.grandchild_2, self.grandchild_3]}],
+        }
+        self.complex_program = {
+            'title': 'complex program',
+            'curricula': [{'is_active': True, 'courses': [{'foo': 'bar'}], 'programs': [self.child_1, self.child_2]}],
+        }
+        self.simple_program = {
+            'title': 'simple program',
+            'curricula': [{'is_active': True, 'courses': [{'foo': 'bar'}], 'programs': [self.grandchild_1]}],
+        }
+
+    def test_child_programs_no_curriculum(self):
+        program = {
+            'title': 'notice that I do not have a curriculum',
+        }
+        self.assertEqual([], self.mixin.child_programs(program))
+
+    def test_child_programs_no_children(self):
+        program = {
+            'title': 'notice that I have a curriculum, but no programs inside it',
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [{'foo': 'bar'},],
+                    'programs': [],
+                },
+            ],
+        }
+        self.assertEqual([], self.mixin.child_programs(program))
+
+    def test_child_programs_one_child(self):
+        self.assertEqual([self.grandchild_1], self.mixin.child_programs(self.simple_program))
+
+    def test_child_programs_many_children(self):
+        expected_children = [
+            self.child_1,
+            self.grandchild_1,
+            self.child_2,
+            self.grandchild_2,
+            self.grandchild_3,
+        ]
+        self.assertEqual(expected_children, self.mixin.child_programs(self.complex_program))
