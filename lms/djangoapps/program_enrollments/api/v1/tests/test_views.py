@@ -1807,59 +1807,109 @@ class ProgramCourseEnrollmentOverviewViewTests(ProgramCacheTestCaseMixin, Shared
 
 
 class TestProgramSpecificViewMixin(TestCase):
-    def setUp(self):
-        super(TestProgramSpecificViewMixin, self).setUp()
-        self.mixin = ProgramSpecificViewMixin()
-        self.grandchild_1 = {
+    @classmethod
+    def setUpClass(cls):
+        super(TestProgramSpecificViewMixin, cls).setUpClass()
+        cls.grandchild_1 = {
             'title': 'grandchild 1',
             'curricula': [{'is_active': True, 'courses': [], 'programs': []}],
         }
-        self.grandchild_2 = {
+        cls.grandchild_2 = {
             'title': 'grandchild 2',
-            'curricula': [{'is_active': True, 'courses': [], 'programs': []}],
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [{
+                        'course_runs': [
+                            {'key': 'course-run-4'},
+                        ],
+                    }],
+                    'programs': [],
+                },
+            ],
         }
-        self.grandchild_3 = {
+        cls.grandchild_3 = {
             'title': 'grandchild 3',
             'curricula': [{'is_active': False}],
         }
-        self.child_1 = {
+        cls.child_1 = {
             'title': 'child 1',
-            'curricula': [{'is_active': True, 'courses': [], 'programs': [self.grandchild_1]}],
+            'curricula': [{'is_active': True, 'courses': [], 'programs': [cls.grandchild_1]}],
         }
-        self.child_2 = {
+        cls.child_2 = {
             'title': 'child 2',
-            'curricula': [{'is_active': True, 'courses': [], 'programs': [self.grandchild_2, self.grandchild_3]}],
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [{
+                        'course_runs': [
+                            {'key': 'course-run-3'},
+                        ],
+                    }],
+                    'programs': [cls.grandchild_2, cls.grandchild_3],
+                },
+            ],
         }
-        self.complex_program = {
+        cls.complex_program = {
             'title': 'complex program',
-            'curricula': [{'is_active': True, 'courses': [{'foo': 'bar'}], 'programs': [self.child_1, self.child_2]}],
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [{
+                        'course_runs': [
+                            {'key': 'course-run-2'},
+                        ],
+                    }],
+                    'programs': [cls.child_1, cls.child_2],
+                },
+            ],
         }
-        self.simple_program = {
+        cls.simple_program = {
             'title': 'simple program',
-            'curricula': [{'is_active': True, 'courses': [{'foo': 'bar'}], 'programs': [self.grandchild_1]}],
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [{
+                        'course_runs': [
+                            {'key': 'course-run-1'},
+                        ],
+                    }],
+                    'programs': [cls.grandchild_1]
+                },
+            ],
         }
+        cls.empty_program = {
+            'title': 'notice that I have a curriculum, but no programs inside it',
+            'curricula': [
+                {
+                    'is_active': True,
+                    'courses': [],
+                    'programs': [],
+                },
+            ],
+        }
+
+    def setUp(self):
+        super(TestProgramSpecificViewMixin, self).setUp()
+
+        class MyView(ProgramSpecificViewMixin):
+            def __init__(self, *args, **kwargs):
+                self.kwargs = {'program_uuid': 'it does not matter what this is'}
+
+        self.view = MyView()
+
 
     def test_child_programs_no_curriculum(self):
         program = {
             'title': 'notice that I do not have a curriculum',
         }
-        self.assertEqual([], self.mixin.child_programs(program))
+        self.assertEqual([], self.view.child_programs(program))
 
     def test_child_programs_no_children(self):
-        program = {
-            'title': 'notice that I have a curriculum, but no programs inside it',
-            'curricula': [
-                {
-                    'is_active': True,
-                    'courses': [{'foo': 'bar'},],
-                    'programs': [],
-                },
-            ],
-        }
-        self.assertEqual([], self.mixin.child_programs(program))
+        self.assertEqual([], self.view.child_programs(self.empty_program))
 
     def test_child_programs_one_child(self):
-        self.assertEqual([self.grandchild_1], self.mixin.child_programs(self.simple_program))
+        self.assertEqual([self.grandchild_1], self.view.child_programs(self.simple_program))
 
     def test_child_programs_many_children(self):
         expected_children = [
@@ -1869,4 +1919,30 @@ class TestProgramSpecificViewMixin(TestCase):
             self.grandchild_2,
             self.grandchild_3,
         ]
-        self.assertEqual(expected_children, self.mixin.child_programs(self.complex_program))
+        self.assertEqual(expected_children, self.view.child_programs(self.complex_program))
+
+    def test_course_run_keys_no_courses(self):
+        with mock.patch(
+            'lms.djangoapps.program_enrollments.api.v1.views.get_programs',
+            return_value=self.empty_program,
+        ):
+            self.assertEqual(set(), self.view.course_run_keys)
+
+    def test_course_run_keys_one_course(self):
+        with mock.patch(
+            'lms.djangoapps.program_enrollments.api.v1.views.get_programs',
+            return_value=self.simple_program,
+        ):
+            self.assertEqual({'course-run-1'}, self.view.course_run_keys)
+
+    def test_course_run_keys_many_courses(self):
+        with mock.patch(
+            'lms.djangoapps.program_enrollments.api.v1.views.get_programs',
+            return_value=self.complex_program,
+        ):
+            expected_course_runs = {
+                'course-run-2',
+                'course-run-3',
+                'course-run-4',
+            }
+            self.assertEqual(expected_course_runs, self.view.course_run_keys)

@@ -598,8 +598,10 @@ class ProgramSpecificViewMixin(object):
         keys = set()
         for program in [self.program] + self.child_programs(self.program):
             curriculum = self.primary_active_curriculum(program)
-            keys.update(self.course_runs_from_container(curriculum))
+            if curriculum:
+                keys.update(self.course_runs_from_container(curriculum))
             keys.update(self.course_runs_from_container(program))
+        return keys
 
     @staticmethod
     def course_runs_from_container(container):
