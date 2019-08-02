@@ -66,7 +66,14 @@ class TestUtils(ApiTestCase):
 
     def test_financial_assistant_ticket(self):
         """ Test Financial Assistent request ticket. """
-        with patch('requests.post', return_value=MagicMock(status_code=200)):
+        ticket_creation_response_data = {
+            "ticket": {
+                "id": 35436,
+                "subject": "My printer is on fire!",
+            }
+        }
+        response_text = json.dumps(ticket_creation_response_data)
+        with patch('requests.post', return_value=MagicMock(status_code=200, text=response_text)):
             with patch('requests.put', return_value=MagicMock(status_code=200)):
                 with patch('openedx.core.djangoapps.zendesk_proxy.utils.get_zendesk_group_by_name', return_value=2):
                     status_code = create_zendesk_ticket(
@@ -97,9 +104,8 @@ class TestUtils(ApiTestCase):
                 }
             ]
         }
+        
         response_text = json.dumps(response_data)
-        with patch('requests.get') as mock_obj:
-            mock_obj.status_code = 200
-            mock_obj.text = response_text
+        with patch('requests.get', return_value=MagicMock(status_code=200, text=response_text)):
             id = get_zendesk_group_by_name('DJs')
         self.assertEqual(id, 211)
