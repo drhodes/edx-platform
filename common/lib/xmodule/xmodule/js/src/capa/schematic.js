@@ -47,6 +47,7 @@ var cktsim = (function() {
         this.device_map = [];
         this.voltage_sources = [];
         this.current_sources = [];
+        this.dep_current_sources = [];
 	    this.finalized = false;
 	    this.diddc = false;
 	    this.node_index = -1;
@@ -759,6 +760,13 @@ var cktsim = (function() {
 	    return this.add_device(d, name);
 	};
 
+	Circuit.prototype.di = function(n1,n2,v,name) {
+	    var d = new DISource(n1,n2,v);
+	    this.dep_current_sources.push(d);
+	    return this.add_device(d, name);
+	};
+
+    
     Circuit.prototype.opamp = function(np,nn,no,ng,A,name) {
         var ratio;
 	    // try to convert string value into numeric value, barf if we can't
@@ -1651,6 +1659,58 @@ var cktsim = (function() {
 	    ckt.add_to_rhs(this.nneg,1.0,rhs);   // and out of nneg
 	}
 
+
+    ///////////////////////////////////////////////////////////////////////////////
+	//
+	//  Dependent Current Source: TODO understand this.
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+    
+    function DISource(npos,nneg,v) {
+	    Device.call(this);
+	    this.src = parse_source(v);
+	    this.npos = npos;
+	    this.nneg = nneg;
+	}
+	DISource.prototype = new Device();
+	DISource.prototype.constructor = DISource;
+    
+    DISource.prototype.load_linear = function(ckt) {
+	    // ??? Current source is open when off, no linear contribution
+	}
+    
+	// ??? load linear system equations for dc analysis
+	DISource.prototype.load_dc = function(ckt,soln,rhs) {
+	    var is = this.src.dc;
+        
+	    // ??? MNA stamp for independent current source
+	    ckt.add_to_rhs(this.npos,-is,rhs);  // current flow into npos
+	    ckt.add_to_rhs(this.nneg,is,rhs);   // and out of nneg
+	}
+
+	// ??? load linear system equations for tran analysis (just like DC)
+    DISource.prototype.load_tran = function(ckt,soln,rhs,time) {
+	    var is = this.src.value(time);
+        
+	    // ??? MNA stamp for independent current source
+	    ckt.add_to_rhs(this.npos,-is,rhs);  // current flow into npos
+	    ckt.add_to_rhs(this.nneg,is,rhs);   // and out of nneg
+	}
+
+	// ??? return time of next breakpoint for the device
+	DISource.prototype.breakpoint = function(time) {
+	    return this.src.inflection_point(time);
+	}
+    
+	// ??? small signal model: open circuit
+    DISource.prototype.load_ac = function(ckt,rhs) {
+	    // ??? MNA stamp for independent current source
+	    ckt.add_to_rhs(this.npos,-1.0,rhs);  // current flow into npos
+	    ckt.add_to_rhs(this.nneg,1.0,rhs);   // and out of nneg
+	}
+
+    
 	///////////////////////////////////////////////////////////////////////////////
 	//
 	//  Resistor
@@ -2003,8 +2063,9 @@ schematic = (function() {
 	    'g': [Ground, 'Ground connection'],
 	    'L': [Label, 'Node label'],
 	    'v': [VSource, 'Voltage source'],
-	    'i': [ISource, 'Current source'],
-	    'r': [Resistor, 'Resistor'],
+	    'i': [ISource, 'Current source'],	
+	    'di': [DISource, 'Dependent current source'],
+        'r': [Resistor, 'Resistor'],
 	    'c': [Capacitor, 'Capacitor'],
 	    'l': [Inductor, 'Inductor'],
 	    'o': [OpAmp, 'Op Amp'],
@@ -4927,6 +4988,30 @@ schematic = (function() {
 	    this.sch.draw_arc(c,nx,ny,radius,0,2*Math.PI,false,1,filled);
 	}
 
+    // TODO figure out the squashed distortion behavior when rotating.
+	Component.prototype.draw_diamond = function(c,x,y,side_length,filled) {
+	    if (filled) c.fillStyle = this.selected ? selected_style : normal_style;
+	    else c.strokeStyle = this.selected ? selected_style :
+		    this.type == 'w' ? normal_style : component_style;
+	    var nx = this.transform_x(x,y) + this.x;
+	    var ny = this.transform_y(x,y) + this.y;
+       
+        // nx, ny is the center
+        const dx = side_length;
+        const dy = side_length;
+
+	    var left = this.transform_x(x-dx,y) + this.x;
+	    var top = this.transform_y(x,y-dy) + this.y;
+	    var right = this.transform_x(x+dx,y) + this.x;
+	    var bottom = this.transform_y(x,y+dy) + this.y;
+
+	    this.sch.draw_line(c, nx, top, right, ny,1);
+	    this.sch.draw_line(c, right, ny, nx, bottom, 1);
+	    this.sch.draw_line(c, nx, bottom, left, ny, 1);
+	    this.sch.draw_line(c, left, ny, nx, top, 1);
+	};
+
+    
     var rot_angle = [
 		0.0,		// NORTH (identity)
 		Math.PI/2,	// EAST (rot270)
@@ -6014,7 +6099,12 @@ schematic = (function() {
 	Source.prototype.draw = function(c) {
 	    Component.prototype.draw.call(this,c);   // give superclass a shot
 	    this.draw_line(c,0,0,0,12);
-	    this.draw_circle(c,0,24,12,false);
+
+        if (this.type == 'di') {
+	        this.draw_diamond(c,0,24,12,false);
+        } else {
+	        this.draw_circle(c,0,24,12,false);
+        }
 	    this.draw_line(c,0,36,0,48);
 
 	    if (this.type == 'v') {  // voltage source
@@ -6027,7 +6117,12 @@ schematic = (function() {
 		    this.draw_line(c,0,15,0,32);
 		    this.draw_line(c,-3,26,0,32);
 		    this.draw_line(c,3,26,0,32);
-	    }
+	    } else if (this.type == 'di') { // dependent current source
+		    // draw arrow: pos to neg
+		    this.draw_line(c,0,15,0,32);
+		    this.draw_line(c,-3,26,0,32);
+		    this.draw_line(c,3,26,0,32);
+        }
 
 	    if (this.properties['name'])
 		    this.draw_text(c,this.properties['name'],-13,24,5,property_size);
