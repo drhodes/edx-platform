@@ -6227,6 +6227,24 @@ schematic = (function() {
 	    return new ISource(x,y,this.rotation,this.properties['name'],this.properties['value']);
 	}
 
+    //
+	function DISource(x,y,rotation,name,value) {
+	    Source.call(this,x,y,rotation,name,'di',value);
+	    this.type = 'di';
+	}
+	DISource.prototype = new Component();
+	DISource.prototype.constructor = DISource;
+	DISource.prototype.toString = Source.prototype.toString;
+	DISource.prototype.draw = Source.prototype.draw;
+	DISource.prototype.clone = Source.prototype.clone;
+	DISource.prototype.build_content = Source.prototype.build_content;
+	DISource.prototype.edit_properties = Source.prototype.edit_properties;
+
+	DISource.prototype.clone = function(x,y) {
+	    return new DISource(x,y,this.rotation,this.properties['name'],this.properties['value']);
+	};
+
+    
 	///////////////////////////////////////////////////////////////////////////////
 	//
 	//  JQuery slider support for setting a component value
