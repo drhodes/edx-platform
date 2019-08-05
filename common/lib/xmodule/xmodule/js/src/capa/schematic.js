@@ -172,6 +172,9 @@ var cktsim = (function() {
 		        this.v(connections[0],connections[1],properties['value'],name);
 		    else if (type == 'i') 	// current source
 		        this.i(connections[0],connections[1],properties['value'],name);
+		    else if (type == 'vccs') // voltage controlled current source
+                // TODO confingure these connections appropriately.
+		        this.vccs(connections[0],connections[1],properties['value'],name);
 		    else if (type == 'o') 	// op amp
 		        this.opamp(connections[0],connections[1],connections[2],connections[3],properties['A'],name);
 		    else if (type == 'n') 	// n fet
@@ -761,12 +764,13 @@ var cktsim = (function() {
 	    return this.add_device(d, name);
 	};
 
-	Circuit.prototype.di = function(n1,n2,v,name) {
+    // what's up with these argumentents for VCCS? how do they differ
+    // from ISource?
+	Circuit.prototype.vccs = function(n1,n2,v,name) {
 	    var d = new VCCSource(n1,n2,v);
 	    this.vccs_sources.push(d);
 	    return this.add_device(d, name);
 	};
-
     
     Circuit.prototype.opamp = function(np,nn,no,ng,A,name) {
         var ratio;
@@ -4988,30 +4992,6 @@ schematic = (function() {
 
 	    this.sch.draw_arc(c,nx,ny,radius,0,2*Math.PI,false,1,filled);
 	}
-
-    // TODO figure out the squashed distortion behavior when rotating.
-	Component.prototype.draw_diamond = function(c,x,y,side_length,filled) {
-	    if (filled) c.fillStyle = this.selected ? selected_style : normal_style;
-	    else c.strokeStyle = this.selected ? selected_style :
-		    this.type == 'w' ? normal_style : component_style;
-	    var nx = this.transform_x(x,y) + this.x;
-	    var ny = this.transform_y(x,y) + this.y;
-       
-        // nx, ny is the center
-        const dx = side_length;
-        const dy = side_length;
-
-	    var left = this.transform_x(x-dx,y) + this.x;
-	    var top = this.transform_y(x,y-dy) + this.y;
-	    var right = this.transform_x(x+dx,y) + this.x;
-	    var bottom = this.transform_y(x,y+dy) + this.y;
-
-	    this.sch.draw_line(c, nx, top, right, ny,1);
-	    this.sch.draw_line(c, right, ny, nx, bottom, 1);
-	    this.sch.draw_line(c, nx, bottom, left, ny, 1);
-	    this.sch.draw_line(c, left, ny, nx, top, 1);
-	};
-
     
     var rot_angle = [
 		0.0,		// NORTH (identity)
@@ -6101,9 +6081,7 @@ schematic = (function() {
 	    Component.prototype.draw.call(this,c);   // give superclass a shot
 	    this.draw_line(c,0,0,0,12);
 
-        if (this.type == 'vccs') {
-	        this.draw_diamond(c,0,24,12,false);
-        } else {
+        if (this.type != 'vccs') {
 	        this.draw_circle(c,0,24,12,false);
         }
 	    this.draw_line(c,0,36,0,48);
@@ -6118,11 +6096,25 @@ schematic = (function() {
 		    this.draw_line(c,0,15,0,32);
 		    this.draw_line(c,-3,26,0,32);
 		    this.draw_line(c,3,26,0,32);
-	    } else if (this.type == 'vccs') { // dependent current source
+	    } else if (this.type == 'vccs') { // voltage controlled current source
+            // draw diamond
+	        this.draw_line(c, 0, 12, 10, 24);
+	        this.draw_line(c, 10, 24, 0, 36);
+	        this.draw_line(c, 0, 36, -10, 24);
+	        this.draw_line(c, -10, 24, 0, 12);
+            
 		    // draw arrow: pos to neg
 		    this.draw_line(c,0,15,0,32);
 		    this.draw_line(c,-3,26,0,32);
 		    this.draw_line(c,3,26,0,32);
+
+		    // draw +
+	        this.draw_line(c, -10, 8, -6, 8);
+	        this.draw_line(c, -8, 10, -8, 6);
+
+            // draw -
+	        this.draw_line(c, -10, 40, -6, 40);
+
         }
 
 	    if (this.properties['name'])
@@ -6327,7 +6319,9 @@ schematic = (function() {
 	function VCCSource(x,y,rotation,name,value) {
 	    Source.call(this,x,y,rotation,name,'vccs',value);
 	    this.type = 'vccs';
-	}
+	    this.add_connection(-16,8);
+	    this.add_connection(-16,40);
+    }
 	VCCSource.prototype = new Component();
 	VCCSource.prototype.constructor = VCCSource;
 	VCCSource.prototype.toString = Source.prototype.toString;
