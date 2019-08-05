@@ -48,7 +48,7 @@ var cktsim = (function() {
         this.device_map = [];
         this.voltage_sources = [];
         this.current_sources = [];
-        this.dep_current_sources = [];
+        this.vccs_sources = [];
 	    this.finalized = false;
 	    this.diddc = false;
 	    this.node_index = -1;
@@ -762,8 +762,8 @@ var cktsim = (function() {
 	};
 
 	Circuit.prototype.di = function(n1,n2,v,name) {
-	    var d = new DISource(n1,n2,v);
-	    this.dep_current_sources.push(d);
+	    var d = new VCCSource(n1,n2,v);
+	    this.vccs_sources.push(d);
 	    return this.add_device(d, name);
 	};
 
@@ -1668,21 +1668,21 @@ var cktsim = (function() {
 	///////////////////////////////////////////////////////////////////////////////
 
     
-    function DISource(npos,nneg,v) {
+    function VCCSource(npos,nneg,v) {
 	    Device.call(this);
 	    this.src = parse_source(v);
 	    this.npos = npos;
 	    this.nneg = nneg;
 	}
-	DISource.prototype = new Device();
-	DISource.prototype.constructor = DISource;
+	VCCSource.prototype = new Device();
+	VCCSource.prototype.constructor = VCCSource;
     
-    DISource.prototype.load_linear = function(ckt) {
+    VCCSource.prototype.load_linear = function(ckt) {
 	    // ??? Current source is open when off, no linear contribution
 	}
     
 	// ??? load linear system equations for dc analysis
-	DISource.prototype.load_dc = function(ckt,soln,rhs) {
+	VCCSource.prototype.load_dc = function(ckt,soln,rhs) {
 	    var is = this.src.dc;
         
 	    // ??? MNA stamp for independent current source
@@ -1691,7 +1691,7 @@ var cktsim = (function() {
 	}
 
 	// ??? load linear system equations for tran analysis (just like DC)
-    DISource.prototype.load_tran = function(ckt,soln,rhs,time) {
+    VCCSource.prototype.load_tran = function(ckt,soln,rhs,time) {
 	    var is = this.src.value(time);
         
 	    // ??? MNA stamp for independent current source
@@ -1700,12 +1700,12 @@ var cktsim = (function() {
 	}
 
 	// ??? return time of next breakpoint for the device
-	DISource.prototype.breakpoint = function(time) {
+	VCCSource.prototype.breakpoint = function(time) {
 	    return this.src.inflection_point(time);
 	}
     
 	// ??? small signal model: open circuit
-    DISource.prototype.load_ac = function(ckt,rhs) {
+    VCCSource.prototype.load_ac = function(ckt,rhs) {
 	    // ??? MNA stamp for independent current source
 	    ckt.add_to_rhs(this.npos,-1.0,rhs);  // current flow into npos
 	    ckt.add_to_rhs(this.nneg,1.0,rhs);   // and out of nneg
@@ -2065,7 +2065,7 @@ schematic = (function() {
 	    'L': [Label, 'Node label'],
 	    'v': [VSource, 'Voltage source'],
 	    'i': [ISource, 'Current source'],	
-	    'di': [DISource, 'Dependent current source'],
+	    'vccs': [VCCSource, 'Voltage controlled current source'],
         'r': [Resistor, 'Resistor'],
 	    'c': [Capacitor, 'Capacitor'],
 	    'l': [Inductor, 'Inductor'],
@@ -6101,7 +6101,7 @@ schematic = (function() {
 	    Component.prototype.draw.call(this,c);   // give superclass a shot
 	    this.draw_line(c,0,0,0,12);
 
-        if (this.type == 'di') {
+        if (this.type == 'vccs') {
 	        this.draw_diamond(c,0,24,12,false);
         } else {
 	        this.draw_circle(c,0,24,12,false);
@@ -6118,7 +6118,7 @@ schematic = (function() {
 		    this.draw_line(c,0,15,0,32);
 		    this.draw_line(c,-3,26,0,32);
 		    this.draw_line(c,3,26,0,32);
-	    } else if (this.type == 'di') { // dependent current source
+	    } else if (this.type == 'vccs') { // dependent current source
 		    // draw arrow: pos to neg
 		    this.draw_line(c,0,15,0,32);
 		    this.draw_line(c,-3,26,0,32);
@@ -6324,20 +6324,20 @@ schematic = (function() {
 	}
 
     //
-	function DISource(x,y,rotation,name,value) {
-	    Source.call(this,x,y,rotation,name,'di',value);
-	    this.type = 'di';
+	function VCCSource(x,y,rotation,name,value) {
+	    Source.call(this,x,y,rotation,name,'vccs',value);
+	    this.type = 'vccs';
 	}
-	DISource.prototype = new Component();
-	DISource.prototype.constructor = DISource;
-	DISource.prototype.toString = Source.prototype.toString;
-	DISource.prototype.draw = Source.prototype.draw;
-	DISource.prototype.clone = Source.prototype.clone;
-	DISource.prototype.build_content = Source.prototype.build_content;
-	DISource.prototype.edit_properties = Source.prototype.edit_properties;
+	VCCSource.prototype = new Component();
+	VCCSource.prototype.constructor = VCCSource;
+	VCCSource.prototype.toString = Source.prototype.toString;
+	VCCSource.prototype.draw = Source.prototype.draw;
+	VCCSource.prototype.clone = Source.prototype.clone;
+	VCCSource.prototype.build_content = Source.prototype.build_content;
+	VCCSource.prototype.edit_properties = Source.prototype.edit_properties;
 
-	DISource.prototype.clone = function(x,y) {
-	    return new DISource(x,y,this.rotation,this.properties['name'],this.properties['value']);
+	VCCSource.prototype.clone = function(x,y) {
+	    return new VCCSource(x,y,this.rotation,this.properties['name'],this.properties['value']);
 	};
 
     
