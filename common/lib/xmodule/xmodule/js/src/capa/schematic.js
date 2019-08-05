@@ -12,7 +12,8 @@
 // create a circuit for simulation using "new cktsim.Circuit()"
 
 // for modified nodal analysis (MNA) stamps see
-// http://www.analog-electronics.eu/analog-electronics/modified-nodal-analysis/modified-nodal-analysis.xhtml
+// https://web.archive.org/web/20160421095602/http://www.analog-electronics.eu/analog-electronics/modified-nodal-analysis/modified-nodal-analysis.xhtml
+
 
 var cktsim = (function() {
 	///////////////////////////////////////////////////////////////////////////////
