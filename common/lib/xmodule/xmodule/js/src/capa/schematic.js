@@ -6388,23 +6388,100 @@ schematic = (function() {
         return new ISource(x, y, this.rotation, this.properties['name'], this.properties['value']);
     };
 
-    //
-    function VCCSource(x, y, rotation, name, value) {
-        Source.call(this, x, y, rotation, name, 'vccs', value);
+    // -----------------------------------------------------------------------------
+    function VCCSource(x, y, rotation, name, conductance) {
         this.type = 'vccs';
+        Component.call(this, this.type, x, y, rotation);
+        this.properties['name'] = name;
+        if (conductance == undefined) conductance = 'G(1)';
+        this.properties['conductance'] = conductance;
+        this.add_connection(0, 0);
+        this.add_connection(0, 48);
+        this.bounding_box = [-12, 0, 12, 48];
+        this.update_coords();
+        this.content = document.createElement('div'); // used by edit_properties
         this.add_connection(-16, 8);
         this.add_connection(-16, 40);
     }
+
     VCCSource.prototype = new Component();
     VCCSource.prototype.constructor = VCCSource;
-    VCCSource.prototype.toString = Source.prototype.toString;
-    VCCSource.prototype.draw = Source.prototype.draw;
-    VCCSource.prototype.clone = Source.prototype.clone;
-    VCCSource.prototype.build_content = Source.prototype.build_content;
-    VCCSource.prototype.edit_properties = Source.prototype.edit_properties;
+
+    VCCSource.prototype.toString = function() {
+        return edx.StringUtils.interpolate('<{type}source {params} ({x},{y})>', {
+            type: this.type,
+            params: this.properties['params'],
+            x: this.x,
+            y: this.y,
+        });
+    };
+
+    VCCSource.prototype.draw = function(c) {
+        Component.prototype.draw.call(this, c); // give superclass a shot
+        this.draw_line(c, 0, 0, 0, 12);
+        this.draw_line(c, 0, 36, 0, 48);
+
+        if (this.type == 'vccs') {
+            // draw diamond
+            this.draw_line(c, 0, 12, 10, 24);
+            this.draw_line(c, 10, 24, 0, 36);
+            this.draw_line(c, 0, 36, -10, 24);
+            this.draw_line(c, -10, 24, 0, 12);
+
+            // draw arrow: pos to neg
+            this.draw_line(c, 0, 15, 0, 32);
+            this.draw_line(c, -3, 26, 0, 32);
+            this.draw_line(c, 3, 26, 0, 32);
+
+            // draw +
+            this.draw_line(c, -10, 8, -6, 8);
+            this.draw_line(c, -8, 10, -8, 6);
+
+            // draw -
+            this.draw_line(c, -10, 40, -6, 40);
+        }
+
+        if (this.properties['name']) this.draw_text(c, this.properties['name'], -13, 24, 5, property_size);
+        if (this.properties['conductance']) {
+            this.draw_text(c, this.properties['conductance'], 13, 24, 3, property_size);
+        }
+    };
+
+    // build property editor div
+    VCCSource.prototype.build_content = function(src) {
+        // make an <input> widget for each property
+        var fields = [];
+        fields['name'] = build_input('text', 10, this.properties['name']);
+        fields['G'] = build_input('conductance', 10, this.properties['conductance'].slice(2, -1));
+        var div = this.content;
+        if (div.hasChildNodes()) div.removeChild(div.firstChild); // remove table of input fields
+        div.appendChild(build_table(fields));
+        div.fields = fields;
+        div.component = this;
+        return div;
+    };
+
+    VCCSource.prototype.edit_properties = function(x, y) {
+        if (this.near(x, y)) {
+            // TODO why check for typeof cktsim?
+            // this.src = undefined;
+            // if (typeof cktsim != 'undefined') this.src = cktsim.parse_source(this.properties['conductance']);
+            this.src = cktsim.parse_source(this.properties['conductance']);
+            var content = this.build_content(this.src);
+
+            this.sch.dialog('Edit Properties', content, function(content) {
+                var c = content.component;
+                var fields = content.fields;
+                c.properties['name'] = fields['name'].value;
+                c.properties['conductance'] = 'G(' + fields['G'].value + ')';
+                c.sch.redraw_background();
+            });
+            return true;
+        } else return false;
+    };
 
     VCCSource.prototype.clone = function(x, y) {
-        return new VCCSource(x, y, this.rotation, this.properties['name'], this.properties['value']);
+        return new VCCSource(x, y, this.rotation, this.properties['name'], this.properties['conductance']);
     };
 
     ///////////////////////////////////////////////////////////////////////////////
