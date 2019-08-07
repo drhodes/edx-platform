@@ -2048,19 +2048,21 @@ function update_schematics() {
     var schematics = $('.schematic');
     for (var i = 0; i < schematics.length; ++i)
         if (schematics[i].getAttribute('loaded') != 'true') {
-            try {
-                new schematic.Schematic(schematics[i]);
-            } catch (err) {
-                var msgdiv = document.createElement('div');
-                msgdiv.style.border = 'thick solid #FF0000';
-                msgdiv.style.margins = '20px';
-                msgdiv.style.padding = '20px';
-                var msg = document.createTextNode(
-                    'Sorry, there a browser error in starting the schematic tool.  The tool is known to be compatible with the latest versions of Firefox and Chrome, which we recommend you use.'
-                );
-                msgdiv.appendChild(msg);
-                schematics[i].parentNode.insertBefore(msgdiv, schematics[i]);
-            }
+            new schematic.Schematic(schematics[i]);
+
+            // try {
+            //     new schematic.Schematic(schematics[i]);
+            // } catch (err) {
+            //     var msgdiv = document.createElement('div');
+            //     msgdiv.style.border = 'thick solid #FF0000';
+            //     msgdiv.style.margins = '20px';
+            //     msgdiv.style.padding = '20px';
+            //     var msg = document.createTextNode(
+            //         'Sorry, there a browser error in starting the schematic tool.  The tool is known to be compatible with the latest versions of Firefox and Chrome, which we recommend you use.'
+            //     );
+            //     msgdiv.appendChild(msg);
+            //     schematics[i].parentNode.insertBefore(msgdiv, schematics[i]);
+            // }
             schematics[i].setAttribute('loaded', 'true');
         }
 }
