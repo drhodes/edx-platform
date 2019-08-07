@@ -5129,79 +5129,16 @@ schematic = (function() {
     };
 
     // result of rotating an alignment [rot*9 + align]
+    // prettier-ignore
     var aOrient = [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8, // NORTH (identity)
-        2,
-        5,
-        8,
-        1,
-        4,
-        7,
-        0,
-        3,
-        6, // EAST (rot270)
-        8,
-        7,
-        6,
-        5,
-        4,
-        3,
-        2,
-        1,
-        0, // SOUTH (rot180)
-        6,
-        3,
-        0,
-        7,
-        4,
-        1,
-        8,
-        5,
-        3, // WEST (rot90)
-        2,
-        1,
-        0,
-        5,
-        4,
-        3,
-        8,
-        7,
-        6, // RNORTH (negy)
-        8,
-        5,
-        2,
-        7,
-        4,
-        1,
-        6,
-        3,
-        0, // REAST (int-neg)
-        6,
-        7,
-        8,
-        3,
-        4,
-        5,
-        0,
-        1,
-        2, // RSOUTH (negx)
-        0,
-        3,
-        6,
-        1,
-        4,
-        7,
-        2,
-        5,
-        8, // RWEST (int-pos)
+        0, 1, 2, 3, 4, 5, 6, 7, 8, // NORTH (identity)
+        2, 5, 8, 1, 4, 7, 0, 3, 6, // EAST (rot270)
+        8, 7, 6, 5, 4, 3, 2, 1, 0, // SOUTH (rot180)
+        6, 3, 0, 7, 4, 1, 8, 5, 3, // WEST (rot90)
+        2, 1, 0, 5, 4, 3, 8, 7, 6, // RNORTH (negy)
+        8, 5, 2, 7, 4, 1, 6, 3, 0, // REAST (int-neg)
+        6, 7, 8, 3, 4, 5, 0, 1, 2, // RSOUTH (negx)
+        0, 3, 6, 1, 4, 7, 2, 5, 8, // RWEST (int-pos)
     ];
 
     var textAlign = ['left', 'center', 'right', 'left', 'center', 'right', 'left', 'center', 'right'];
