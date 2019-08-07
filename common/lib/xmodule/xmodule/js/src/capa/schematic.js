@@ -6164,9 +6164,7 @@ schematic = (function() {
         Component.prototype.draw.call(this, c); // give superclass a shot
         this.draw_line(c, 0, 0, 0, 12);
 
-        if (this.type != 'vccs') {
-            this.draw_circle(c, 0, 24, 12, false);
-        }
+        this.draw_circle(c, 0, 24, 12, false);
         this.draw_line(c, 0, 36, 0, 48);
 
         if (this.type == 'v') {
@@ -6181,25 +6179,6 @@ schematic = (function() {
             this.draw_line(c, 0, 15, 0, 32);
             this.draw_line(c, -3, 26, 0, 32);
             this.draw_line(c, 3, 26, 0, 32);
-        } else if (this.type == 'vccs') {
-            // voltage controlled current source
-            // draw diamond
-            this.draw_line(c, 0, 12, 10, 24);
-            this.draw_line(c, 10, 24, 0, 36);
-            this.draw_line(c, 0, 36, -10, 24);
-            this.draw_line(c, -10, 24, 0, 12);
-
-            // draw arrow: pos to neg
-            this.draw_line(c, 0, 15, 0, 32);
-            this.draw_line(c, -3, 26, 0, 32);
-            this.draw_line(c, 3, 26, 0, 32);
-
-            // draw +
-            this.draw_line(c, -10, 8, -6, 8);
-            this.draw_line(c, -8, 10, -8, 6);
-
-            // draw -
-            this.draw_line(c, -10, 40, -6, 40);
         }
 
         if (this.properties['name']) this.draw_text(c, this.properties['name'], -13, 24, 5, property_size);
@@ -6421,25 +6400,23 @@ schematic = (function() {
         this.draw_line(c, 0, 0, 0, 12);
         this.draw_line(c, 0, 36, 0, 48);
 
-        if (this.type == 'vccs') {
-            // draw diamond
-            this.draw_line(c, 0, 12, 10, 24);
-            this.draw_line(c, 10, 24, 0, 36);
-            this.draw_line(c, 0, 36, -10, 24);
-            this.draw_line(c, -10, 24, 0, 12);
+        // draw diamond
+        this.draw_line(c, 0, 12, 10, 24);
+        this.draw_line(c, 10, 24, 0, 36);
+        this.draw_line(c, 0, 36, -10, 24);
+        this.draw_line(c, -10, 24, 0, 12);
 
-            // draw arrow: pos to neg
-            this.draw_line(c, 0, 15, 0, 32);
-            this.draw_line(c, -3, 26, 0, 32);
-            this.draw_line(c, 3, 26, 0, 32);
+        // draw arrow: pos to neg
+        this.draw_line(c, 0, 15, 0, 32);
+        this.draw_line(c, -3, 26, 0, 32);
+        this.draw_line(c, 3, 26, 0, 32);
 
-            // draw +
-            this.draw_line(c, -10, 8, -6, 8);
-            this.draw_line(c, -8, 10, -8, 6);
+        // draw +
+        this.draw_line(c, -10, 8, -6, 8);
+        this.draw_line(c, -8, 10, -8, 6);
 
-            // draw -
-            this.draw_line(c, -10, 40, -6, 40);
-        }
+        // draw -
+        this.draw_line(c, -10, 40, -6, 40);
 
         if (this.properties['name']) this.draw_text(c, this.properties['name'], -13, 24, 5, property_size);
         if (this.properties['conductance']) {
