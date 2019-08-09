@@ -10,7 +10,7 @@ import re
 from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
-from StringIO import StringIO
+from six import StringIO
 
 import dateutil.parser
 import ddt

@@ -1065,7 +1065,11 @@ WEBPACK_CONFIG_PATH = 'webpack.prod.config.js'
 ################################# CELERY ######################################
 
 # Auto discover tasks fails to detect contentstore tasks
-CELERY_IMPORTS = ('cms.djangoapps.contentstore.tasks')
+CELERY_IMPORTS = (
+    'cms.djangoapps.contentstore.tasks',
+    'openedx.core.djangoapps.bookmarks.tasks',
+    'openedx.core.djangoapps.ccxcon.tasks',
+)
 
 # Message configuration
 
@@ -1244,7 +1248,6 @@ INSTALLED_APPS = [
     'mptt',
     'sekizai',
     'openedx.core.djangoapps.user_api',
-    'django_openid_auth',
 
     # Country embargo support
     'openedx.core.djangoapps.embargo',
@@ -1789,7 +1792,6 @@ ENTERPRISE_ENROLLMENT_API_URL = LMS_ROOT_URL + LMS_ENROLLMENT_API_PATH
 ENTERPRISE_SERVICE_WORKER_USERNAME = 'enterprise_worker'
 ENTERPRISE_API_CACHE_TIMEOUT = 3600  # Value is in seconds
 # The default value of this needs to be a 16 character string
-ENTERPRISE_REPORTING_SECRET = '0000000000000000'
 ENTERPRISE_CUSTOMER_CATALOG_DEFAULT_CONTENT_FILTER = {}
 
 BASE_COOKIE_DOMAIN = 'localhost'
