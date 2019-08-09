@@ -5738,7 +5738,7 @@ schematic = (function() {
             if (c.type == 'w') {
                 var c_e1 = c.connections[0].location;
                 var c_e2 = c.connections[1].location;
-                if ((e1 == c_e1 && c2 == c_e2) || (e1 == c_e2 && e2 == c_e1)) {
+                if ((e1 == c_e1 && e2 == c_e2) || (e1 == c_e2 && e2 == c_e1)) {
                     c.remove();
                     break;
                 }
