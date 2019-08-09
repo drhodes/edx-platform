@@ -1372,7 +1372,7 @@ var cktsim = (function() {
     ///////////////////////////////////////////////////////////////////////////////
 
     // argument is a string describing the source's value (see comments for details)
-    // source types: dc,step,square,triangle,sin,pulse,pwl,pwl_repeating
+    // source types: dc,step,square,triangle,sin,pulse,pwl(piecewise linear),pwl_repeating
 
     // returns an object with the following attributes:
     //   fun -- name of source function
@@ -1718,43 +1718,31 @@ var cktsim = (function() {
         // ??? Current source is open when off, no linear contribution
     };
 
-    // ??? load linear system equations for dc analysis
     VCCSource.prototype.load_dc = function(ckt, soln, rhs) {
         var is = this.src.dc;
-        console.log([soln[this.vpos], soln[this.vneg], soln]);
         let dv = soln[this.vpos] - soln[this.vneg];
-        console.log([this.v, dv]);
-
-        // TODO clean this up.
-        var conductance;
-        if (this.v[0] == 'G') {
-            // figure out why this G is here
-            conductance = parseFloat(this.v.slice(2, -1));
-        } else {
-            conductance = parseFloat(this.v);
-        }
-
+        const conductance = parseFloat(this.v);
         ckt.add_to_rhs(this.ipos, -dv * conductance, rhs); // current flow into ipos
         ckt.add_to_rhs(this.ineg, dv * conductance, rhs); // and out of ineg
     };
 
-    // ??? load linear system equations for tran analysis (just like DC)
+    // TODO (understand) load linear system equations for tran analysis (just like DC)
     VCCSource.prototype.load_tran = function(ckt, soln, rhs, time) {
         var is = this.src.value(time);
 
-        // ??? MNA stamp for independent current source
+        // TODO(???) MNA stamp for independent current source
         ckt.add_to_rhs(this.ipos, -is, rhs); // current flow into ipos
         ckt.add_to_rhs(this.ineg, is, rhs); // and out of ineg
     };
 
-    // ??? return time of next breakpoint for the device
+    // TODO(???) return time of next breakpoint for the device
     VCCSource.prototype.breakpoint = function(time) {
         return this.src.inflection_point(time);
     };
 
-    // ??? small signal model: open circuit
+    // TODO(???) small signal model: open circuit
     VCCSource.prototype.load_ac = function(ckt, rhs) {
-        // ??? MNA stamp for independent current source
+        // TODO(???) MNA stamp for independent current source
         ckt.add_to_rhs(this.ipos, -1.0, rhs); // current flow into ipos
         ckt.add_to_rhs(this.ineg, 1.0, rhs); // and out of ineg
     };
@@ -6393,7 +6381,7 @@ schematic = (function() {
         this.type = 'vccs';
         Component.call(this, this.type, x, y, rotation);
         this.properties['name'] = name;
-        if (conductance == undefined) conductance = 'G(1)';
+        if (conductance == undefined) conductance = '1';
         this.properties['conductance'] = conductance;
         this.add_connection(0, 0);
         this.add_connection(0, 48);
@@ -6441,7 +6429,8 @@ schematic = (function() {
 
         if (this.properties['name']) this.draw_text(c, this.properties['name'], -13, 24, 5, property_size);
         if (this.properties['conductance']) {
-            this.draw_text(c, this.properties['conductance'], 13, 24, 3, property_size);
+            const label = 'G(' + this.properties['conductance'] + ')';
+            this.draw_text(c, label, 13, 24, 3, property_size);
         }
     };
 
@@ -6450,8 +6439,7 @@ schematic = (function() {
         // make an <input> widget for each property
         var fields = [];
         fields['name'] = build_input('text', 10, this.properties['name']);
-        // TODO slicing this string seems nasty.
-        fields['G'] = build_input('conductance', 10, this.properties['conductance'].slice(2, -1));
+        fields['G'] = build_input('conductance', 10, this.properties['conductance']);
         var div = this.content;
         if (div.hasChildNodes()) div.removeChild(div.firstChild); // remove table of input fields
         div.appendChild(build_table(fields));
@@ -6462,17 +6450,17 @@ schematic = (function() {
 
     VCCSource.prototype.edit_properties = function(x, y) {
         if (this.near(x, y)) {
-            // TODO why check for typeof cktsim?
-            // this.src = undefined;
-            // if (typeof cktsim != 'undefined') this.src = cktsim.parse_source(this.properties['conductance']);
-            this.src = cktsim.parse_source(this.properties['conductance']);
+            this.src = undefined;
+            if (typeof cktsim != 'undefined') {
+                this.src = cktsim.parse_source(this.properties['conductance']);
+            }
             var content = this.build_content(this.src);
 
             this.sch.dialog('Edit Properties', content, function(content) {
                 var c = content.component;
                 var fields = content.fields;
                 c.properties['name'] = fields['name'].value;
-                c.properties['conductance'] = 'G(' + fields['G'].value + ')';
+                c.properties['conductance'] = fields['G'].value;
                 c.sch.redraw_background();
             });
             return true;
@@ -6480,9 +6468,7 @@ schematic = (function() {
     };
 
     VCCSource.prototype.clone = function(x, y) {
-        // TODO again, slicing this string seems is nasty.
-        var conductance = this.properties['conductance'].slice(2, -1);
-        return new VCCSource(x, y, this.rotation, this.properties['name'], conductance);
+        return new VCCSource(x, y, this.rotation, this.properties['name'], this.properties['conductance']);
     };
 
     ///////////////////////////////////////////////////////////////////////////////
