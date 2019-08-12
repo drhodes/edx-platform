@@ -1698,7 +1698,9 @@ var cktsim = (function() {
 
     ///////////////////////////////////////////////////////////////////////////////
     //
-    //  Dependent Current Source: TODO understand this.
+    //  Dependent Current Source: TODO understand this,
+    //  see from the top link:
+    //  5.3.8  Voltage-Controlled Current Source: VCCS
     //
     ///////////////////////////////////////////////////////////////////////////////
 
@@ -1719,7 +1721,6 @@ var cktsim = (function() {
     };
 
     VCCSource.prototype.load_dc = function(ckt, soln, rhs) {
-        var is = this.src.dc;
         let dv = soln[this.vpos] - soln[this.vneg];
         const conductance = parseFloat(this.v);
         ckt.add_to_rhs(this.ipos, -dv * conductance, rhs); // current flow into ipos
@@ -1728,11 +1729,7 @@ var cktsim = (function() {
 
     // TODO (understand) load linear system equations for tran analysis (just like DC)
     VCCSource.prototype.load_tran = function(ckt, soln, rhs, time) {
-        var is = this.src.value(time);
-
-        // TODO(???) MNA stamp for independent current source
-        ckt.add_to_rhs(this.ipos, -is, rhs); // current flow into ipos
-        ckt.add_to_rhs(this.ineg, is, rhs); // and out of ineg
+        this.load_dc(ckt, soln, rhs);
     };
 
     // TODO(???) return time of next breakpoint for the device
