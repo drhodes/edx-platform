@@ -1,0 +1,48 @@
+
+* Testing schematic.js
+
+The idea is to check the results from schematic.js against ngspice, a
+free and opensource circuit simulator available through many linux
+package management systems.
+
+** Strategy
+*** Tools
+**** $ ngspice -v
+ngspice compiled from ngspice revision 30
+Written originally by Berkeley University
+Currently maintained by the NGSpice Project
+Copyright (C) 1985-1996,  The Regents of the University of California
+Copyright (C) 1999-2011,  The NGSpice Project
+
+*** Reuse the tests that ngspice uses.  
+- translate the *.cir netlist format to the schematic.js json netlist format
+- schematic.js has a json netlist loader, use that. 
+- run the ngspice analysis for testN.cir
+- determine the format of the ngspice output
+- run the schematic.js analysis for testN and output to ngspice output
+- diff the two outputs
+- Run the tests in node.
+
+**** get the tests
+git clone git://git.code.sf.net/p/ngspice/ngspice
+
+
+*** Existing code
+**** parsing code
+***** https://github.com/fahimkhan/Online-NgSpice-Simulator/issues/3
+
+***** https://pypi.org/project/PySpice/ 
+PySpice implements a Ngspice binding and provides an oriented object
+API on top of SPICE, the simulation output is converted to Numpy
+arrays for convenience.
+
+****** installing
+$ pip3 install pyspice
+
+In [5]: PySpice.show_version()
+PySpice Version 1.3.2
+
+****** docs
+https://pyspice.fabrice-salvaire.fr
+
+
