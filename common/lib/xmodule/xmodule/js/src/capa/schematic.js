@@ -218,6 +218,156 @@ var cktsim = (function() {
         return true;
     };
 
+    // Output spice netlists for testing purposes
+    Circuit.prototype.emit_spice = function(netlist) {
+        // set up mapping for all ground connections
+        for (var i = netlist.length - 1; i >= 0; --i) {
+            var component = netlist[i];
+            var type = component[0];
+            if (type == 'g') {
+                var connections = component[3];
+                this.node_map[connections[0]] = this.gnd_node();
+            }
+        }
+
+        let spice = ['* schematic.js'];
+
+        // process each component in the JSON netlist (see schematic.js for format)
+        var found_ground = false;
+        for (var i = netlist.length - 1; i >= 0; --i) {
+            var component = netlist[i];
+            var type = component[0];
+
+            // ignore wires, ground connections, scope probes and view info
+            if (type == 'view' || type == 'w' || type == 'g' || type == 's' || type == 'L') {
+                continue;
+            }
+
+            var properties = component[2];
+            var name = properties['name'];
+            if (name == undefined || name == '') name = '_' + properties['_json_'].toString();
+
+            // convert node names to circuit indicies
+            // TODO why is there a negative node index?
+            var connections = component[3];
+            for (var j = connections.length - 1; j >= 0; --j) {
+                console.log(['j', j]);
+                var node = connections[j];
+                var index = this.node_map[node];
+                if (index == undefined) {
+                    index = this.node(node, T_VOLTAGE);
+                } else if (index == this.gnd_node()) {
+                    found_ground = true;
+                }
+                connections[j] = index;
+            }
+
+            // ngspice uses 0 for gnd.
+            let cin = connections[0] == this.gnd_node() ? '0' : 'net_' + connections[0];
+            let cout = connections[1] == this.gnd_node() ? '0' : 'net_' + connections[1];
+
+            // process the component
+            if (type == 'r') {
+                // resistor
+                let ohms = properties['r'];
+                spice.push(`R_${name} ${cin} ${cout} ${ohms}`);
+            } else if (type == 'd') {
+                // diode
+                let area = properties['area'];
+                let diodeType = properties['type'];
+                // TODO figure out how to represent normal diode in spice.
+                if (diodeType === 'normal') {
+                    spice.push(`D_${name} ${cin} ${cout} ${area}`);
+                } else if (diodeType === 'ideal') {
+                    throw 'ideal diode unimplemented for spice';
+                } else {
+                    throw 'unknown diode type: ' + diodeType;
+                }
+
+                // TODO figure out how to represent ideal diode in spice.
+            } else if (type == 'c') {
+                // capacitor
+                this.c(connections[0], connections[1], properties['c'], name);
+            } else if (type == 'l') {
+                // inductor
+                this.l(connections[0], connections[1], properties['l'], name);
+            } else if (type == 'v') {
+                // http://bwrcs.eecs.berkeley.edu/Classes/IcBook/SPICE/UserGuide/elements_fr.html
+                let v = parse_source(properties['value']);
+                // SCHEMATIC PARAMETERS
+                // fun -- name of source function
+                // args -- list of argument values
+                // value(t) -- compute source value at time t
+                // inflection_point(t) -- compute time after t when a time point is needed
+                // dc -- value at time 0
+                // period -- repeat period for periodic sources (0 if not periodic)
+
+                if (v.fun == 'dc') {
+                    spice.push(`V_${name} ${cin} ${cout} DC ${v.dc}`);
+                } else if (v.fun == 'sin') {
+                    let args = v.args.join(' ');
+                    spice.push(`V_${name} ${cin} ${cout} DC SIN(${args})`);
+                } else {
+                    // TODO handle all types of voltage sources
+                    spice.push(`undhandled voltage source: ${name} ${properties['value']}`);
+                }
+            } else if (type == 'i') {
+                // current source
+                this.i(connections[0], connections[1], properties['value'], name);
+            } else if (type == 'vccs') {
+                // voltage controlled current source
+                // TODO confingure these connections appropriately.
+                this.vccs(
+                    connections[0],
+                    connections[1],
+                    connections[2],
+                    connections[3],
+                    properties['conductance'],
+                    name
+                );
+            } else if (type == 'o') {
+                // op amp
+                this.opamp(
+                    connections[0],
+                    connections[1],
+                    connections[2],
+                    connections[3],
+                    properties['A'],
+                    name
+                );
+            } else if (type == 'n') {
+                // n fet
+                this.n(connections[0], connections[1], connections[2], properties['W/L'], name);
+            } else if (type == 'p') {
+                // p fet
+                this.p(connections[0], connections[1], connections[2], properties['W/L'], name);
+            } else if (type == 'a') {
+                // current probe == 0-volt voltage source
+                this.v(connections[0], connections[1], '0', name);
+            }
+        }
+
+        if (!found_ground) {
+            // No ground on schematic
+            alert('Please make at least one connection to ground  (inverted T symbol)');
+            return false;
+        }
+
+        spice.push('.control');
+        spice.push('tran .1ms 1s');
+        spice.push('.endc');
+
+        // if in a browser then open new tab and display the data.
+        // TODO thinking about Node.js running this function on a over
+        // json test cases, then running ngspice on that.  Still the
+        // transient analysis from schematic.js needs to be done for
+        // comparison.
+        var tab = window.open('about:blank', '');
+        tab.document.write('<pre>' + spice.join('\n') + '</pre>');
+        tab.document.close();
+        return true;
+    };
+
     // if converges: updates this.solution, this.soln_max, returns iter count
     // otherwise: return undefined and set this.problem_node
     // Load should compute -f and df/dx (note the sign pattern!)
@@ -1220,6 +1370,10 @@ var cktsim = (function() {
         return undefined;
     };
 
+    Device.prototype.emit_ngspice = function() {
+        throw 'emit_ngspice unimplemented';
+    };
+
     ///////////////////////////////////////////////////////////////////////////////
     //
     //  Parse numbers in engineering notation
@@ -2150,7 +2304,7 @@ schematic = (function() {
         // use user-supplied list of analyses, otherwise provide them all
         // analyses="" means no analyses
         var analyses = input.getAttribute('analyses');
-        if (analyses == undefined || analyses == 'None') analyses = ['dc', 'ac', 'tran'];
+        if (analyses == undefined || analyses == 'None') analyses = ['dc', 'ac', 'tran', 'spice'];
         else if (analyses == '') analyses = [];
         else analyses = analyses.split(',');
 
@@ -2219,6 +2373,11 @@ schematic = (function() {
                 this.enable_tool('tran', true);
                 this.tran_npts = '100'; // default values for transient analysis
                 this.tran_tstop = '1';
+            }
+
+            if (analyses.indexOf('spice') != -1) {
+                this.tools['spice'] = this.add_tool('SPICE', 'Emit Spice', this.emit_spice);
+                this.enable_tool('spice', true);
             }
         }
 
@@ -2791,6 +2950,24 @@ schematic = (function() {
     //  Simulation interface
     //
     ////////////////////////////////////////////////////////////////////////////////
+
+    // generate ngspice netlist
+    Schematic.prototype.emit_spice = function() {
+        console.log('emitting spice');
+        // give all the circuit nodes a name, extract netlist
+        this.label_connection_points();
+        var netlist = this.json();
+
+        // since we've done the heavy lifting, update input field value
+        // so user can grab diagram if they want
+        this.input.value = JSON.stringify(netlist);
+
+        // create a circuit from the netlist
+        var ckt = new cktsim.Circuit();
+
+        // the spice must flow.
+        return ckt.emit_spice(netlist);
+    };
 
     Schematic.prototype.extract_circuit = function() {
         // give all the circuit nodes a name, extract netlist
