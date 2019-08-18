@@ -6692,3 +6692,9 @@ schematic = (function() {
     };
     return module;
 })();
+
+// note: for now this export only exposes the circuit simulator, for
+// no particular reason. The following lines support testing with
+// jasmine.
+var module = module || {};
+module.exports = cktsim;
