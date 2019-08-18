@@ -5,61 +5,73 @@ ProgramEnrollment Views
 from __future__ import absolute_import, unicode_literals
 
 import logging
-from datetime import datetime, timedelta
 from functools import wraps
-from pytz import UTC
 
-from django.http import Http404
+from ccx_keys.locator import CCXLocator
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
-from django.urls import reverse
+from django.core.management import call_command
+from django.db import transaction
+from django.http import Http404
 from django.utils.functional import cached_property
 from edx_rest_framework_extensions import permissions
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from edx_rest_framework_extensions.auth.session.authentication import SessionAuthenticationAllowInactiveUser
 from opaque_keys.edx.keys import CourseKey
+from organizations.models import Organization
 from rest_framework import status
-from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
-from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from six import text_type
 
-from six import iteritems
-
-from ccx_keys.locator import CCXLocator
-from bulk_email.api import is_bulk_email_feature_enabled, is_user_opted_out_for_course
 from course_modes.models import CourseMode
-from edx_when.api import get_dates_for_course
 from lms.djangoapps.certificates.api import get_certificate_for_user
+from lms.djangoapps.grades.api import CourseGradeFactory, clear_prefetched_course_grades, prefetch_course_grades
+from lms.djangoapps.grades.rest_api.v1.utils import CourseEnrollmentPagination
+from lms.djangoapps.program_enrollments.api.api import (
+    get_course_run_status,
+    get_course_run_url,
+    get_due_dates,
+    get_emails_enabled
+)
 from lms.djangoapps.program_enrollments.api.v1.constants import (
-    CourseEnrollmentResponseStatuses,
-    CourseRunProgressStatuses,
+    ENABLE_ENROLLMENT_RESET_FLAG,
     MAX_ENROLLMENT_RECORDS,
+    CourseEnrollmentResponseStatuses,
     ProgramEnrollmentResponseStatuses,
 )
 from lms.djangoapps.program_enrollments.api.v1.serializers import (
     CourseRunOverviewListSerializer,
     ProgramCourseEnrollmentListSerializer,
     ProgramCourseEnrollmentRequestSerializer,
+    ProgramCourseGradeErrorResult,
+    ProgramCourseGradeResult,
+    ProgramCourseGradeResultSerializer,
     ProgramEnrollmentCreateRequestSerializer,
     ProgramEnrollmentListSerializer,
-    ProgramEnrollmentModifyRequestSerializer,
+    ProgramEnrollmentModifyRequestSerializer
 )
 from lms.djangoapps.program_enrollments.models import ProgramCourseEnrollment, ProgramEnrollment
-from lms.djangoapps.program_enrollments.utils import get_user_by_program_id, ProviderDoesNotExistException
-from student.helpers import get_resume_urls_for_enrollments
-from student.models import CourseEnrollment
-from student.roles import CourseInstructorRole, CourseStaffRole, UserBasedRole
-from xmodule.modulestore.django import modulestore
+from lms.djangoapps.program_enrollments.utils import (
+    ProviderDoesNotExistException,
+    get_provider_slug,
+    get_user_by_program_id
+)
 from openedx.core.djangoapps.catalog.utils import (
     course_run_keys_for_program,
     get_programs,
     get_programs_by_type,
-    normalize_program_type,
+    get_programs_for_organization,
+    normalize_program_type
 )
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from openedx.core.lib.api.authentication import OAuth2AuthenticationAllowInactiveUser
 from openedx.core.lib.api.view_utils import DeveloperErrorViewMixin, PaginatedAPIView, verify_course_exists
+from student.helpers import get_resume_urls_for_enrollments
+from student.models import CourseEnrollment
+from student.roles import CourseInstructorRole, CourseStaffRole, UserBasedRole
 from util.query import use_read_replica_if_available
 
 logger = logging.getLogger(__name__)
@@ -133,25 +145,11 @@ def verify_course_exists_and_in_program(view_func):
     return wrapped_function
 
 
-class ProgramEnrollmentPagination(CursorPagination):
+class ProgramEnrollmentPagination(CourseEnrollmentPagination):
     """
-    Pagination class for Program Enrollments.
+    Pagination class for views in the Program Enrollments app.
     """
-    ordering = 'id'
     page_size = 100
-    page_size_query_param = 'page_size'
-
-    def get_page_size(self, request):
-        """
-        Get the page size based on the defined page size parameter if defined.
-        """
-        try:
-            page_size_string = request.query_params[self.page_size_query_param]
-            return int(page_size_string)
-        except (KeyError, ValueError):
-            pass
-
-        return self.page_size
 
 
 class ProgramEnrollmentsView(DeveloperErrorViewMixin, PaginatedAPIView):
@@ -1058,14 +1056,14 @@ class ProgramCourseEnrollmentOverviewView(DeveloperErrorViewMixin, ProgramSpecif
             course_run_dict = {
                 'course_run_id': enrollment.course_id,
                 'display_name': overview.display_name_with_default,
-                'course_run_status': self.get_course_run_status(overview, certificate_info),
-                'course_run_url': self.get_course_run_url(request, enrollment.course_id),
+                'course_run_status': get_course_run_status(overview, certificate_info),
+                'course_run_url': get_course_run_url(request, enrollment.course_id),
                 'start_date': overview.start,
                 'end_date': overview.end,
-                'due_dates': self.get_due_dates(request, enrollment.course_id, user),
+                'due_dates': get_due_dates(request, enrollment.course_id, user),
             }
 
-            emails_enabled = self.get_emails_enabled(user, enrollment.course_id)
+            emails_enabled = get_emails_enabled(user, enrollment.course_id)
             if emails_enabled is not None:
                 course_run_dict['emails_enabled'] = emails_enabled
 
@@ -1096,116 +1094,244 @@ class ProgramCourseEnrollmentOverviewView(DeveloperErrorViewMixin, ProgramSpecif
         if not program_enrollments:
             raise PermissionDenied
 
-    @staticmethod
-    def get_due_dates(request, course_key, user):
+
+class ProgramCourseGradesView(
+        DeveloperErrorViewMixin,
+        ProgramCourseRunSpecificViewMixin,
+        PaginatedAPIView,
+):
+    """
+    A view for retrieving a paginated list of grades for all students enrolled
+    in a given courserun through a given program.
+
+    Path: ``/api/program_enrollments/v1/programs/{program_uuid}/courses/{course_id}/grades/``
+
+    Accepts: [GET]
+
+    For GET requests, the path can contain an optional `page_size?=N` query parameter.
+    The default page size is 100.
+
+    ------------------------------------------------------------------------------------
+    GETs
+    ------------------------------------------------------------------------------------
+
+    **Returns**
+        * 200: OK - Contains a paginated set of program courserun grades.
+        * 204: No Content - No grades to return
+        * 207: Mixed result - Contains mixed list of program courserun grades
+               and grade-fetching errors
+        * 422: All failed - Contains list of grade-fetching errors
+        * 401: The requesting user is not authenticated.
+        * 403: The requesting user lacks access for the given program/course.
+        * 404: The requested program or course does not exist.
+
+    **Response**
+
+        In the case of a 200/207/422 response code, the response will include a
+        paginated data set.  The `results` section of the response consists of a
+        list of grade records, where each successfully loaded record contains:
+          * student_key: The identifier of the student enrolled in the program and course.
+          * letter_grade: A letter grade as defined in grading policy
+            (e.g. 'A' 'B' 'C' for 6.002x) or None.
+          * passed: Boolean representing whether the course has been
+            passed according to the course's grading policy.
+          * percent: A float representing the overall grade for the course.
+        and failed-to-load records contain:
+          * student_key
+          * error: error message from grades Exception
+
+    **Example**
+
+        207 Multi-Status
+        {
+            "next": null,
+            "previous": "http://example.com/api/program_enrollments/v1/programs/{program_uuid}/courses/{course_id}/grades/?cursor=abcd",
+            "results": [;
+                {
+                    "student_key": "01709bffeae2807b6a7317",
+                    "letter_grade": "Pass",
+                    "percent": 0.95,
+                    "passed": true
+                },
+                {
+                    "student_key": "2cfe15e3380a52e7198237",
+                    "error": "Timeout while calculating grade"
+                },
+                ...
+            ],
+        }
+    """
+    authentication_classes = (
+        JwtAuthentication,
+        OAuth2AuthenticationAllowInactiveUser,
+        SessionAuthenticationAllowInactiveUser,
+    )
+    permission_classes = (permissions.JWT_RESTRICTED_APPLICATION_OR_USER_ACCESS,)
+    pagination_class = ProgramEnrollmentPagination
+
+    @verify_course_exists
+    @verify_program_exists
+    def get(self, request, program_uuid=None, course_id=None):
         """
-        Get due date information for a user for blocks in a course.
+        Defines the GET list endpoint for ProgramCourseGrade objects.
+        """
+        course_key = CourseKey.from_string(course_id)
+        grade_results = self._load_grade_results(program_uuid, course_key)
+        serializer = ProgramCourseGradeResultSerializer(grade_results, many=True)
+        response_code = self._calc_response_code(grade_results)
+        return self.get_paginated_response(serializer.data, status_code=response_code)
+
+    def _load_grade_results(self, program_uuid, course_key):
+        """
+        Load grades (or grading errors) for a given program courserun.
 
         Arguments:
-            request: the request object
-            course_key (CourseKey): the CourseKey for the course
-            user: the user object for which we want due date information
+            program_uuid (str)
+            course_key (CourseKey)
 
-        Returns:
-            due_dates (list): a list of dictionaries containing due date information
-                keys:
-                    name: the display name of the block
-                    url: the deep link to the block
-                    date: the due date for the block
+        Returns: list[ProgramCourseGradeResult|ProgramCourseGradeErrorResult]
         """
-        dates = get_dates_for_course(
-            course_key,
-            user,
-        )
-
-        store = modulestore()
-
-        due_dates = []
-        for (block_key, date_type), date in iteritems(dates):
-            if date_type == 'due':
-                block = store.get_item(block_key)
-
-                # get url to the block in the course
-                block_url = reverse('jump_to', args=[course_key, block_key])
-                block_url = request.build_absolute_uri(block_url)
-
-                due_dates.append({
-                    'name': block.display_name,
-                    'url': block_url,
-                    'date': date,
-                })
-        return due_dates
-
-    @staticmethod
-    def get_course_run_url(request, course_id):
-        """
-        Get the URL to a course run.
-
-        Arguments:
-            request: the request object
-            course_id (string): the course id of the course
-
-        Returns:
-            (string): the URL to the course run associated with course_id
-        """
-        course_run_url = reverse('openedx.course_experience.course_home', args=[course_id])
-        return request.build_absolute_uri(course_run_url)
-
-    @staticmethod
-    def get_emails_enabled(user, course_id):
-        """
-        Get whether or not emails are enabled in the context of a course.
-
-        Arguments:
-            user: the user object for which we want to check whether emails are enabled
-            course_id (string): the course id of the course
-
-        Returns:
-            (bool): True if emails are enabled for the course associated with course_id for the user;
-            False otherwise
-        """
-        if is_bulk_email_feature_enabled(course_id=course_id):
-            return not is_user_opted_out_for_course(user=user, course_id=course_id)
-        return None
-
-    @staticmethod
-    def get_course_run_status(course_overview, certificate_info):
-        """
-        Get the progress status of a course run, given the state of a user's certificate in the course.
-
-        In the case of self-paced course runs, the run is considered completed when either the course run has ended
-        OR the user has earned a passing certificate 30 days ago or longer.
-
-        Arguments:
-            course_overview (CourseOverview): the overview for the course run
-            certificate_info: A dict containing the following keys:
-                ``is_passing``: whether the  user has a passing certificate in the course run
-                ``created``: the date the certificate was created
-
-        Returns:
-            status: one of (
-                CourseRunProgressStatuses.COMPLETE,
-                CourseRunProgressStatuses.IN_PROGRESS,
-                CourseRunProgressStatuses.UPCOMING,
+        enrollments_qs = use_read_replica_if_available(
+            ProgramCourseEnrollment.objects.filter(
+                program_enrollment__program_uuid=program_uuid,
+                program_enrollment__user__isnull=False,
+                course_key=course_key,
+            ).select_related(
+                'program_enrollment',
+                'program_enrollment__user',
             )
-        """
-        is_certificate_passing = certificate_info.get('is_passing', False)
-        certificate_creation_date = certificate_info.get('created', datetime.max)
+        )
+        paginated_enrollments = self.paginate_queryset(enrollments_qs)
+        if not paginated_enrollments:
+            return []
 
-        if course_overview.pacing == 'instructor':
-            if course_overview.has_ended():
-                return CourseRunProgressStatuses.COMPLETED
-            elif course_overview.has_started():
-                return CourseRunProgressStatuses.IN_PROGRESS
-            else:
-                return CourseRunProgressStatuses.UPCOMING
-        elif course_overview.pacing == 'self':
-            thirty_days_ago = datetime.now(UTC) - timedelta(30)
-            certificate_completed = is_certificate_passing and (certificate_creation_date <= thirty_days_ago)
-            if course_overview.has_ended() or certificate_completed:
-                return CourseRunProgressStatuses.COMPLETED
-            elif course_overview.has_started():
-                return CourseRunProgressStatuses.IN_PROGRESS
-            else:
-                return CourseRunProgressStatuses.UPCOMING
-        return None
+        # Hint: `zip(*(list))` can be read as "unzip(list)"
+        enrollments, users = zip(*(
+            (enrollment, enrollment.program_enrollment.user)
+            for enrollment in paginated_enrollments
+        ))
+        enrollment_grade_pairs = zip(
+            enrollments, self._iter_grades(course_key, list(users))
+        )
+        grade_results = [
+            (
+                ProgramCourseGradeResult(enrollment, grade)
+                if grade
+                else ProgramCourseGradeErrorResult(enrollment, exception)
+            )
+            for enrollment, (grade, exception) in enrollment_grade_pairs
+        ]
+        return grade_results
+
+    @staticmethod
+    def _iter_grades(course_key, users):
+        """
+        Load a user grades for a course, using bulk fetching for efficiency.
+
+        Arguments:
+            course_key (CourseKey)
+            users (list[User])
+
+        Returns: iterable[( CourseGradeBase|NoneType, Exception|NoneType )]
+            Iterable of pairs, in same order as `users`.
+            The first item in the pair is the grade, or None if loading the
+                grade failed.
+            The second item in the pair is an exception or None.
+        """
+        prefetch_course_grades(course_key, users)
+        try:
+            grades_iter = CourseGradeFactory().iter(users, course_key=course_key)
+            for user, course_grade, exception in grades_iter:
+                if not course_grade:
+                    fmt = 'Failed to load course grade for user ID {} in {}: {}'
+                    err_str = fmt.format(
+                        user.id,
+                        course_key,
+                        text_type(exception) if exception else 'Unknown error'
+                    )
+                    logger.error(err_str)
+                yield course_grade, exception
+        finally:
+            clear_prefetched_course_grades(course_key)
+
+    @staticmethod
+    def _calc_response_code(grade_results):
+        """
+        Returns HTTP status code appropriate for list of results,
+        which may be grades or errors.
+
+        Arguments:
+            enrollment_grade_results: list[ProgramCourseGradeResult]
+
+        Returns: int
+          * 200 for all success
+          * 207 for mixed result
+          * 422 for all failure
+          * 204 for empty
+        """
+        if not grade_results:
+            return status.HTTP_204_NO_CONTENT
+        if all(result.is_error for result in grade_results):
+            return status.HTTP_422_UNPROCESSABLE_ENTITY
+        if any(result.is_error for result in grade_results):
+            return status.HTTP_207_MULTI_STATUS
+        return status.HTTP_200_OK
+
+
+class EnrollmentDataResetView(APIView):
+    """
+    Resets enrollments and users for a given organization and set of programs.
+    Note, this will remove ALL users from the input organization.
+
+    Path: ``/api/program_enrollments/v1/integration-reset/``
+
+    Accepts: [POST]
+
+    ------------------------------------------------------------------------------------
+    POST
+    ------------------------------------------------------------------------------------
+
+    **Returns**
+        * 200: OK - Enrollments and users sucessfully deleted
+        * 400: Bad Requeset - Program does not match the requested organization
+        * 401: Unauthorized - The requesting user is not authenticated.
+        * 404: Not Found - A requested program does not exist.
+
+    **Response**
+    """
+    authentication_classes = (
+        JwtAuthentication,
+        OAuth2AuthenticationAllowInactiveUser,
+        SessionAuthenticationAllowInactiveUser,
+    )
+    permission_classes = (permissions.JWT_RESTRICTED_APPLICATION_OR_USER_ACCESS,)
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Reset enrollment and user data for organization
+        """
+        if not settings.FEATURES.get(ENABLE_ENROLLMENT_RESET_FLAG):
+            return Response('reset not enabled on this environment', status.HTTP_501_NOT_IMPLEMENTED)
+
+        try:
+            org_key = request.data['organization']
+        except KeyError:
+            return Response("missing required body content 'organization'", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            organization = Organization.objects.get(short_name=org_key)
+        except Organization.DoesNotExist:
+            return Response('organization {} not found'.format(org_key), status.HTTP_404_NOT_FOUND)
+
+        try:
+            idp_slug = get_provider_slug(organization)
+            call_command('remove_social_auth_users', idp_slug, force=True)
+        except ProviderDoesNotExistException:
+            pass
+
+        programs = get_programs_for_organization(organization=organization.short_name)
+        if programs:
+            call_command('reset_enrollment_data', ','.join(programs), force=True)
+
+        return Response('success')
