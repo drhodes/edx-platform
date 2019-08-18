@@ -2,8 +2,8 @@
 build: ## build
 	echo build
 
-test: ## test
-	echo test
+test: FORCE ## test
+	jasmine spec/hello-testing.spec.js
 
 clean: ## clean all the things
 	echo implement clean makefile rule
