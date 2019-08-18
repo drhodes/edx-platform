@@ -2226,7 +2226,6 @@ function update_schematics() {
             schematics[i].setAttribute('loaded', 'true');
         }
 }
-window.update_schematics = update_schematics;
 
 schematic = (function() {
     var background_style = 'rgb(220,220,220)';
