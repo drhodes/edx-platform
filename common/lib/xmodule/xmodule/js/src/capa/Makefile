@@ -9,7 +9,7 @@ clean: ## clean all the things
 	echo implement clean makefile rule
 
 work-emacs: ## open all files in editor
-	emacs -nw *.js *.html
+	emacs -nw *.js *.html spec/*.js
 
 format-js:
 	echo "find a good js formatter"
