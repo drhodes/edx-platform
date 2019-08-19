@@ -212,13 +212,14 @@ var cktsim = (function() {
 
         if (!found_ground) {
             // No ground on schematic
-            alert('Please make at least one connection to ground  (inverted T symbol)');
-            return false;
+            throw 'Please make at least one connection to ground  (inverted T symbol)';
         }
         return true;
     };
 
+    // -----------------------------------------------------------------------------
     // Output spice netlists for testing purposes
+    // throws exception.
     Circuit.prototype.emit_spice = function(netlist) {
         // set up mapping for all ground connections
         for (var i = netlist.length - 1; i >= 0; --i) {
@@ -313,59 +314,47 @@ var cktsim = (function() {
                 }
             } else if (type == 'i') {
                 // current source
-                this.i(connections[0], connections[1], properties['value'], name);
+                // this.i(connections[0], connections[1], properties['value'], name);
             } else if (type == 'vccs') {
                 // voltage controlled current source
                 // TODO confingure these connections appropriately.
-                this.vccs(
-                    connections[0],
-                    connections[1],
-                    connections[2],
-                    connections[3],
-                    properties['conductance'],
-                    name
-                );
+                // this.vccs(
+                //     connections[0],
+                //     connections[1],
+                //     connections[2],
+                //     connections[3],
+                //     properties['conductance'],
+                //     name
+                // );
             } else if (type == 'o') {
                 // op amp
-                this.opamp(
-                    connections[0],
-                    connections[1],
-                    connections[2],
-                    connections[3],
-                    properties['A'],
-                    name
-                );
+                // this.opamp(
+                //     connections[0],
+                //     connections[1],
+                //     connections[2],
+                //     connections[3],
+                //     properties['A'],
+                //     name
+                // );
             } else if (type == 'n') {
                 // n fet
-                this.n(connections[0], connections[1], connections[2], properties['W/L'], name);
+                // this.n(connections[0], connections[1], connections[2], properties['W/L'], name);
             } else if (type == 'p') {
                 // p fet
-                this.p(connections[0], connections[1], connections[2], properties['W/L'], name);
+                // this.p(connections[0], connections[1], connections[2], properties['W/L'], name);
             } else if (type == 'a') {
                 // current probe == 0-volt voltage source
-                this.v(connections[0], connections[1], '0', name);
+                // this.v(connections[0], connections[1], '0', name);
             }
         }
 
         if (!found_ground) {
             // No ground on schematic
-            alert('Please make at least one connection to ground  (inverted T symbol)');
-            return false;
+            throw 'Please make at least one connection to ground  (inverted T symbol)';
         }
 
-        spice.push('.control');
-        spice.push('tran .1ms 1s');
-        spice.push('.endc');
-
-        // if in a browser then open new tab and display the data.
-        // TODO thinking about Node.js running this function on a over
-        // json test cases, then running ngspice on that.  Still the
-        // transient analysis from schematic.js needs to be done for
-        // comparison.
-        var tab = window.open('about:blank', '');
-        tab.document.write('<pre>' + spice.join('\n') + '</pre>');
-        tab.document.close();
-        return true;
+        spice_footer.push('.endc');
+        return spice.concat(spice_footer).join('\n');
     };
 
     // if converges: updates this.solution, this.soln_max, returns iter count
@@ -2952,20 +2941,29 @@ schematic = (function() {
 
     // generate ngspice netlist
     Schematic.prototype.emit_spice = function() {
-        console.log('emitting spice');
+        // console.log('emitting spice');
         // give all the circuit nodes a name, extract netlist
         this.label_connection_points();
         var netlist = this.json();
 
         // since we've done the heavy lifting, update input field value
         // so user can grab diagram if they want
+        // TODO consider removing this line.
         this.input.value = JSON.stringify(netlist);
 
         // create a circuit from the netlist
         var ckt = new cktsim.Circuit();
+        try {
+            var spice = ckt.emit_spice(netlist);
 
-        // the spice must flow.
-        return ckt.emit_spice(netlist);
+            if (spice) {
+                var tab = window.open('about:blank', '');
+                tab.document.write('<pre>' + spice + '</pre>');
+                tab.document.close();
+            }
+        } catch (e) {
+            alert(e);
+        }
     };
 
     Schematic.prototype.extract_circuit = function() {
