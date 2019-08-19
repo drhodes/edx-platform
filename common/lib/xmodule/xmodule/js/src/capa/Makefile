@@ -3,7 +3,7 @@ build: ## build
 	echo build
 
 test: FORCE ## test
-	jasmine spec/hello-testing.spec.js
+	jasmine spec/*.spec.js
 
 clean: ## clean all the things
 	echo implement clean makefile rule

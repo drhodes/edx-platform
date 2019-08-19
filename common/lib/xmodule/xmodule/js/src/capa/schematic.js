@@ -123,6 +123,7 @@ var cktsim = (function() {
     };
 
     // load circuit from JSON netlist (see schematic.js)
+    // TODO discover why load_netlist is not reentrant
     Circuit.prototype.load_netlist = function(netlist) {
         // set up mapping for all ground connections
         for (var i = netlist.length - 1; i >= 0; --i) {
@@ -151,11 +152,15 @@ var cktsim = (function() {
 
             // convert node names to circuit indicies
             var connections = component[3];
+
             for (var j = connections.length - 1; j >= 0; --j) {
                 var node = connections[j];
                 var index = this.node_map[node];
-                if (index == undefined) index = this.node(node, T_VOLTAGE);
-                else if (index == this.gnd_node()) found_ground = true;
+                if (index == undefined) {
+                    index = this.node(node, T_VOLTAGE);
+                } else if (index == this.gnd_node()) {
+                    found_ground = true;
+                }
                 connections[j] = index;
             }
 
@@ -232,9 +237,10 @@ var cktsim = (function() {
         }
 
         let spice = ['* schematic.js'];
-
+        let spice_footer = ['.control', 'tran .1ms 1s'];
         // process each component in the JSON netlist (see schematic.js for format)
         var found_ground = false;
+
         for (var i = netlist.length - 1; i >= 0; --i) {
             var component = netlist[i];
             var type = component[0];
@@ -248,11 +254,8 @@ var cktsim = (function() {
             var name = properties['name'];
             if (name == undefined || name == '') name = '_' + properties['_json_'].toString();
 
-            // convert node names to circuit indicies
-            // TODO why is there a negative node index?
             var connections = component[3];
             for (var j = connections.length - 1; j >= 0; --j) {
-                console.log(['j', j]);
                 var node = connections[j];
                 var index = this.node_map[node];
                 if (index == undefined) {
@@ -266,6 +269,13 @@ var cktsim = (function() {
             // ngspice uses 0 for gnd.
             let cin = connections[0] == this.gnd_node() ? '0' : 'net_' + connections[0];
             let cout = connections[1] == this.gnd_node() ? '0' : 'net_' + connections[1];
+
+            if (connections[0] != this.gnd_node()) {
+                let spice_cmd = `print ${cin}`;
+                if (spice_footer.indexOf(spice_cmd) == -1) {
+                    spice_footer.push(spice_cmd);
+                }
+            }
 
             // process the component
             if (type == 'r') {
@@ -284,14 +294,13 @@ var cktsim = (function() {
                 } else {
                     throw 'unknown diode type: ' + diodeType;
                 }
-
                 // TODO figure out how to represent ideal diode in spice.
             } else if (type == 'c') {
                 // capacitor
-                this.c(connections[0], connections[1], properties['c'], name);
+                // this.c(connections[0], connections[1], properties['c'], name);
             } else if (type == 'l') {
                 // inductor
-                this.l(connections[0], connections[1], properties['l'], name);
+                // this.l(connections[0], connections[1], properties['l'], name);
             } else if (type == 'v') {
                 // http://bwrcs.eecs.berkeley.edu/Classes/IcBook/SPICE/UserGuide/elements_fr.html
                 let v = parse_source(properties['value']);
@@ -2929,7 +2938,6 @@ schematic = (function() {
         if (this.dc_results != undefined) json.push(['dc', this.dc_results]);
         if (this.ac_results != undefined) json.push(['ac', this.ac_results]);
         if (this.transient_results != undefined) json.push(['transient', this.transient_results]);
-
         return json;
     };
 
