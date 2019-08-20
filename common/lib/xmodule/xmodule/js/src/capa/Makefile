@@ -5,21 +5,14 @@ build: ## build
 test: FORCE ## test
 	jasmine spec/*.spec.js
 
+test-debug: FORCE ## invoke tests with debugger.
+	node debug `which jasmine` spec/*.spec.js
+
 clean: ## clean all the things
 	echo implement clean makefile rule
 
 work-emacs: ## open all files in editor
 	emacs -nw *.js *.html spec/*.js
-
-format-js:
-	echo "find a good js formatter"
-
-add: clean ## add files to the git repo
-	git add -A :/
-
-commit: ## git commit -a
-	git commit -a
-
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 .PHONY: help
