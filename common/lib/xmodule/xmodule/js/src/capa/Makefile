@@ -11,8 +11,8 @@ test-debug: FORCE ## invoke tests with debugger.
 clean: ## clean all the things
 	echo implement clean makefile rule
 
-work-emacs: ## open all files in editor
-	emacs -nw *.js *.html spec/*.js
+work: ## open all files in editor
+	emacs -nw *.js *.html spec/*.js learning-journal.org
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 .PHONY: help
