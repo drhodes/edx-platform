@@ -238,7 +238,12 @@ var cktsim = (function() {
         }
 
         let spice = ['* schematic.js'];
-        let spice_footer = ['.control', 'tran .1ms 1s'];
+        // the following array begins with .op
+        // TODO: Why must that be there to prevent ngspice from bailing?
+        // GUESS: doing so establishes initial conditions on the wires?
+        let spice_footer = ['.op', '.control', 'tran 1ms 1s'];
+        let probe_names = [];
+
         // process each component in the JSON netlist (see schematic.js for format)
         var found_ground = false;
 
@@ -274,7 +279,10 @@ var cktsim = (function() {
             if (connections[0] != this.gnd_node()) {
                 let spice_cmd = `print ${cin}`;
                 if (spice_footer.indexOf(spice_cmd) == -1) {
+                    spice_footer.push(`echo "start delimeter ${cin}"`);
                     spice_footer.push(spice_cmd);
+                    spice_footer.push(`echo "end delimeter ${cin}"`);
+                    probe_names.push(`${connections[0]}`);
                 }
             }
 
@@ -503,6 +511,11 @@ var cktsim = (function() {
 
     // Transient analysis (needs work!)
     Circuit.prototype.tran = function(ntpts, tstart, tstop, probenames, no_dc) {
+        // ntpts: number of time points.
+
+        // no_dc: this argument appears not to be
+        // necessary. because its first occurrance is assigned false.
+
         // Define -f and df/dx for Newton solver
         function load_tran(ckt, soln, rhs) {
             // Crnt is initialized to -Gl * soln
@@ -2972,7 +2985,7 @@ schematic = (function() {
 
             if (spice) {
                 var tab = window.open('about:blank', '');
-                tab.document.write('<pre>' + spice + '</pre>');
+                tab.document.write('<pre>' + spice.spice_src + '</pre>');
                 tab.document.close();
             }
         } catch (e) {

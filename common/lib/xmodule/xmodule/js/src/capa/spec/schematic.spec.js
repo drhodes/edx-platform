@@ -1,6 +1,7 @@
 var cktsim = require('../schematic');
 const fs = require('fs');
-const {spawn} = require('child_process');
+const {spawnSync} = require('child_process');
+const sop = require('./spice-output-parsing');
 
 let circuit_data = [
     ['v', [144, 64, 0], {name: '', value: 'sin(0,1,1,0,0)', _json_: 0}, ['1', '0']],
@@ -29,53 +30,47 @@ describe('cktsim: generate a netlist', function() {
     });
 });
 
+let voltage_divider_schem = [
+    ['w', [152, 48, 216, 48]],
+    ['r', [216, 48, 0], {r: '1', _json_: 1}, ['2', '1']],
+    ['v', [152, 48, 0], {name: '', value: 'sin(0,1,1,0,0)', _json_: 2}, ['2', '0']],
+    ['s', [216, 96, 0], {color: 'cyan', offset: '0', _json_: 3}, ['1']],
+    ['r', [216, 96, 0], {r: '1', _json_: 4}, ['1', '0']],
+    ['w', [216, 144, 152, 144]],
+    ['w', [152, 96, 152, 144]],
+    ['g', [152, 144, 0], {_json_: 7}, ['0']],
+    ['view', 29.159999999999997, 12.792000000000002, 2.44140625, '50', '10', '1G', null, '100', '1', '1000'],
+];
+
 describe('cktsim: get transient analysis from circuit data', function() {
     it('should generate an array of records comparable to spice output records', function() {
-        // TODO
+        var circuit = new cktsim.Circuit();
+        let {spice_src, probe_names} = circuit.emit_spice(voltage_divider_schem);
+
+        let options = {input: spice_src};
+        let subp = spawnSync('ngspice', ['-b'], options);
+        expect(subp.status).toEqual(0);
+
+        var spice_records;
+        if (subp.status == 0) {
+            let output = `${subp.stdout}`;
+            spice_records = sop.parse_ngspice_output(output);
+            expect(spice_records).not.toEqual({});
+            //console.log(spice_records);
+        } else {
+            //console.log
+            console.log(`stderr: ${subp.stderr}`);
+        }
+
+        // OK ngspice doesn't support fixed time steps, this is going
+        // to be more involved. interpolation!  2.086 to the rescue!
+        // so given these two time series data, build an abstract
+        // function that supports rough equivalence.
+
+        circuit = new cktsim.Circuit();
+        circuit.load_netlist(voltage_divider_schem);
+        let result = circuit.tran(1000, 0, 1, probe_names, false);
+        console.log(result);
+        debugger;
     });
 });
-
-describe('cktsim: shell out to ngspice', function() {
-    it('should create ngspice subprocess with exit code 0', function() {
-        let circuit = new cktsim.Circuit();
-        var success = circuit.emit_spice(circuit_data);
-        const subprocess = spawn('ngspice');
-
-        subprocess.on('error', err => {
-            console.log('Failed to start subprocess: ngspice');
-            console.log('perhaps it is not installed, it is available on many linux distributions');
-            console.log(err);
-        });
-
-        // TODO figure out how to force jasmine to wait until the subprocess is done.
-        subprocess.on('exit', code => {
-            console.log(`Child exited with code ${code}`);
-            // hypothesis.
-            // this code doesn't run yet because jasmine exits before ngspice
-            expect(true).not.toEqual(true);
-        });
-    });
-});
-
-// ngspice output, need to parse this.
-// Index   time            net_0
-// --------------------------------------------------------------------------------
-// 9277	9.270280e-01	4.426005e-01
-// 9278	9.271280e-01	4.420370e-01
-// 9279	9.272280e-01	4.414733e-01
-// 9280	9.273280e-01	4.409094e-01
-// 9281	9.274280e-01	4.403454e-01
-
-/*
-describe('cktsim: check if results agree with ', function() {
-    it('should run ngspice on generated spice netlist', function() {
-        let circuit = new cktsim.Circuit();
-        var spice = circuit.emit_spice(circuit_data);
-
-        // use pipes here.
-        const subprocess = spawn('ngspice', ['/tmp/spice-test']);
-
-        //subprocess.expect(spice).not.toEqual(false);
-    });
-});
-*/
