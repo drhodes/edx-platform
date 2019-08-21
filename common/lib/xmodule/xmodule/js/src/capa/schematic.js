@@ -1059,6 +1059,9 @@ var cktsim = (function() {
     //  Note, Matrices are stored using nested javascript arrays.
     ////////////////////////////////////////////////////////////////////////////////
 
+    // Fun project idea
+    // consider porting matrix code to rust then compiling to wasm.
+
     // Allocate an NxM matrix
     function mat_make(N, M) {
         var mat = new Array(N);
@@ -1385,10 +1388,6 @@ var cktsim = (function() {
     // return time of next breakpoint for the device
     Device.prototype.breakpoint = function(time) {
         return undefined;
-    };
-
-    Device.prototype.emit_ngspice = function() {
-        throw 'emit_ngspice unimplemented';
     };
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -2973,11 +2972,6 @@ schematic = (function() {
         this.label_connection_points();
         var netlist = this.json();
 
-        // since we've done the heavy lifting, update input field value
-        // so user can grab diagram if they want
-        // TODO consider removing this line.
-        this.input.value = JSON.stringify(netlist);
-
         // create a circuit from the netlist
         var ckt = new cktsim.Circuit();
         try {
@@ -3032,7 +3026,6 @@ schematic = (function() {
     // return a list of [color,node_label,offset,type] for each probe in the diagram
     // type == 'voltage' or 'current'
     Schematic.prototype.find_probes = function() {
-        var result = [];
         var result = [];
         for (var i = this.components.length - 1; i >= 0; --i) {
             var c = this.components[i];
