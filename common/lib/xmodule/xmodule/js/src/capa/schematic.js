@@ -109,6 +109,7 @@ var cktsim = (function() {
                 }
                 var rGV = mat_rank(GV);
                 if (rGV < n_vsrc) {
+                    // TODO designer exception.
                     alert(
                         'Warning!!! Circuit has a voltage source loop or a source or current probe shorted by a wire, please remove the source or the wire causing the short.'
                     );
@@ -359,11 +360,14 @@ var cktsim = (function() {
 
         if (!found_ground) {
             // No ground on schematic
+            // use a structured exception.
+            // https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
             throw 'Please make at least one connection to ground  (inverted T symbol)';
         }
 
         spice_footer.push('.endc');
-        return spice.concat(spice_footer).join('\n');
+        let spice_src = spice.concat(spice_footer).join('\n');
+        return {spice_src: spice_src, probe_names: probe_names};
     };
 
     // if converges: updates this.solution, this.soln_max, returns iter count
@@ -470,8 +474,10 @@ var cktsim = (function() {
         if (typeof iterations == 'undefined') {
             // too many iterations
             if (this.current_sources.length > 0) {
+                // TODO this should throw an exception out to the UI, DesignerException
                 alert('Newton Method Failed, do your current sources have a conductive path to ground?');
             } else {
+                // TODO throw execption, i.e. move browser specific calls out to UI. (alert requires browser)
                 alert('Newton Method Failed, it may be your circuit or it may be our simulator.');
             }
 
