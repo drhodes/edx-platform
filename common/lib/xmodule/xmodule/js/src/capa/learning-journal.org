@@ -1,0 +1,19 @@
+
+* Learning Journal
+** [2019-08-21 Wed 11:45]
+
+
+** links
+*** ngspice manual
+http://ngspice.sourceforge.net/docs/ngspice-manual.pdf
+
+** EEVblog #516 - LTSPICE Tutorial - DC Operating Point Analysis
+"In this introduction Dave explains what LTSPICE is and how to do the
+simplest of the SPICE analysis options - basic DC operating point
+analysis.  Also how to draw basic schematics, display voltages and
+current on your schematic, and a beginner few traps to avoid."
+https://www.youtube.com/watch?v=FEGT5dUpdrc
+
+** The NGSpice input deck - Simulation Series Part Four
+https://www.youtube.com/watch?v=nwPdDcDthuM
+
