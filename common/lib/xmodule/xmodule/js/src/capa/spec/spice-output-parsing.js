@@ -29,6 +29,9 @@ function TimeRecord(time, value) {
     this.time = time;
     this.value = value;
 }
+TimeRecord.prototype.show = function() {
+    return `${this.time}, ${this.value}`;
+};
 
 function parse_ngspice_line(line) {
     // does it match the form: "52 8.856000e-01 6.584793e-01" easier
@@ -38,7 +41,7 @@ function parse_ngspice_line(line) {
     let parts = line.match(/\S+/g) || [];
     if (parts.length < 3) return false;
 
-    let [timeStr, valStr] = parts;
+    let [_, timeStr, valStr] = parts;
 
     time = parseFloat(timeStr);
     val = parseFloat(valStr);

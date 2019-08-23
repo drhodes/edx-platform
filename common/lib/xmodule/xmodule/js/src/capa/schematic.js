@@ -277,7 +277,7 @@ var cktsim = (function() {
             let cout = connections[1] == this.gnd_node() ? '0' : 'net_' + connections[1];
 
             if (connections[0] != this.gnd_node()) {
-                let spice_cmd = `print ${cin}`;
+                let spice_cmd = `print v(${cin})`;
                 if (spice_footer.indexOf(spice_cmd) == -1) {
                     spice_footer.push(`echo "start delimeter ${cin}"`);
                     spice_footer.push(spice_cmd);

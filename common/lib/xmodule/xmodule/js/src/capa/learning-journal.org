@@ -1,6 +1,9 @@
 
 * Learning Journal
 ** [2019-08-21 Wed 11:45]
+Dependent sources in series, oh no!  How to deal with that?
+
+
 
 
 ** links
