@@ -64,7 +64,6 @@ describe('ngspice: parse transient output construct spice reco', function() {
             let output = `${subp.stdout}`;
             let spice_records = sop.parse_ngspice_output(output);
             expect(spice_records).not.toEqual({});
-            //console.log(spice_records);
         } else {
             console.log(`stderr: ${subp.stderr}`);
         }

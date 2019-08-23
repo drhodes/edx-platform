@@ -3199,7 +3199,9 @@ schematic = (function() {
             // LTE calculations in transient analysis
             var probe_list = sch.find_probes();
             var probe_names = new Array(probe_list.length);
-            for (var i = probe_list.length - 1; i >= 0; --i) probe_names[i] = probe_list[i][1];
+            for (var i = probe_list.length - 1; i >= 0; --i) {
+                probe_names[i] = probe_list[i][1];
+            }
 
             // run the analysis
             var results = ckt.tran(

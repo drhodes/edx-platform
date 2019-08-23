@@ -54,8 +54,8 @@ function parse_ngspice_output(stdout) {
 
     // a place to store the spice output from transient analysis.
     var output_records = [];
-    var recording = false;
     var cur_name = '';
+    var recording = false;
 
     stdout.split('\n').forEach(line => {
         // look for "start delimeter" and save the network name.
@@ -77,9 +77,13 @@ function parse_ngspice_output(stdout) {
             return;
         }
 
+        if (recording == false) return; // in non-delimeted region.
+
         // accum the next record.
         let maybeRecord = parse_ngspice_line(line);
-        if (maybeRecord) output_records.push(maybeRecord);
+        if (maybeRecord) {
+            output_records.push(maybeRecord);
+        }
         return;
     });
     return data;

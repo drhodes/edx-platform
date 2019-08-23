@@ -64,13 +64,38 @@ describe('cktsim: get transient analysis from circuit data', function() {
 
         // OK ngspice doesn't support fixed time steps, this is going
         // to be more involved. interpolation!  2.086 to the rescue!
-        // so given these two time series data, build an abstract
-        // function that supports rough equivalence.
+        // so given these two time series data, build a comparable table
+        // that supports rough equivalence.
 
         circuit = new cktsim.Circuit();
         circuit.load_netlist(voltage_divider_schem);
         let result = circuit.tran(1000, 0, 1, probe_names, false);
-        console.log(result);
-        debugger;
+    });
+});
+
+describe('sch: build a Comparable table from a probe', function() {
+    it('should generate an array of records comparable to spice output records', function() {
+        var circuit = new cktsim.Circuit();
+        let {spice_src, probe_names} = circuit.emit_spice(voltage_divider_schem);
+        // need to create a new circuit... TODO, why?
+        circuit = new cktsim.Circuit();
+        circuit.load_netlist(voltage_divider_schem);
+        let result = circuit.tran(1000, 0, 1, probe_names, false);
+        let harness = {};
+
+        Object.keys(result).forEach(key => {
+            if (key == '_time_') return;
+            let arr = result[key];
+            if (typeof arr != 'object') return;
+
+            let time_col = result['_time_'];
+            expect(arr.length).toEqual(time_col.length);
+
+            let records = [];
+            for (var i = 0; i < arr.length; i++) {
+                records.push(new sop.TimeRecord(time_col[i], arr[i]));
+            }
+            harness[key] = records;
+        });
     });
 });
