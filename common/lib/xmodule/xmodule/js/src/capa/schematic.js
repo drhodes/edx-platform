@@ -186,7 +186,6 @@ var cktsim = (function() {
                 this.i(connections[0], connections[1], properties['value'], name);
             else if (type == 'vccs')
                 // voltage controlled current source
-                // TODO confingure these connections appropriately.
                 this.vccs(
                     connections[0],
                     connections[1],
@@ -241,7 +240,12 @@ var cktsim = (function() {
         // the following array begins with .op
         // TODO: Why must that be there to prevent ngspice from bailing?
         // GUESS: doing so establishes initial conditions on the wires?
-        let spice_footer = ['.op', '.control', 'tran 1ms 1s'];
+        let spice_footer = [
+            '.op',
+            '.control',
+            '.option rshunt = 1.0e12', // see 15.1.2.1 Matrix Conditioning info
+            'tran 1ms 1s',
+        ];
         let probe_names = [];
 
         // process each component in the JSON netlist (see schematic.js for format)
@@ -273,8 +277,20 @@ var cktsim = (function() {
             }
 
             // ngspice uses 0 for gnd.
-            let cin = connections[0] == this.gnd_node() ? '0' : 'net_' + connections[0];
-            let cout = connections[1] == this.gnd_node() ? '0' : 'net_' + connections[1];
+            // for (var i = 0; i < connections.length; i++) {
+            //     if (connections[i] == -1) {
+            //         connections[i] = 0;
+            //     }
+            // }
+
+            let cin = connections[0] == this.gnd_node() ? '0' : 'n' + connections[0];
+            let cout = connections[1] == this.gnd_node() ? '0' : 'n' + connections[1];
+
+            let c0 = connections[0] == this.gnd_node() ? '0' : 'n' + connections[0];
+            let c1 = connections[1] == this.gnd_node() ? '0' : 'n' + connections[1];
+            let c2 = connections[2] == this.gnd_node() ? '0' : 'n' + connections[2];
+            let c3 = connections[3] == this.gnd_node() ? '0' : 'n' + connections[3];
+            let c4 = connections[4] == this.gnd_node() ? '0' : 'n' + connections[4];
 
             if (connections[0] != this.gnd_node()) {
                 let spice_cmd = `print v(${cin})`;
@@ -334,6 +350,9 @@ var cktsim = (function() {
                 // current source
                 // this.i(connections[0], connections[1], properties['value'], name);
             } else if (type == 'vccs') {
+                // General form: GlXXXXXXX N+ N- NC+ NC- VALUE
+                let G = properties['conductance'];
+                spice.push(`G1 ${c0} ${c1} ${c2} ${c3} ${G}`);
                 // voltage controlled current source
                 // TODO confingure these connections appropriately.
                 // this.vccs(
@@ -510,7 +529,7 @@ var cktsim = (function() {
     };
 
     // Transient analysis (needs work!)
-    Circuit.prototype.tran = function(ntpts, tstart, tstop, probenames, no_dc) {
+    Circuit.prototype.tran = function(ntpts, tstart, tstop, probenames /*, no_dc */) {
         // ntpts: number of time points.
 
         // no_dc: this argument appears not to be

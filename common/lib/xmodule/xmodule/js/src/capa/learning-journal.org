@@ -3,12 +3,16 @@
 ** [2019-08-21 Wed 11:45]
 Dependent sources in series, oh no!  How to deal with that?
 
-
+** glossary
 
 
 ** links
 *** ngspice manual
 http://ngspice.sourceforge.net/docs/ngspice-manual.pdf
+*** A curated list of awesome resources for electronic engineers and hobbyists
+https://github.com/kitspace/awesome-electronics
+
+
 
 ** EEVblog #516 - LTSPICE Tutorial - DC Operating Point Analysis
 "In this introduction Dave explains what LTSPICE is and how to do the
@@ -16,6 +20,36 @@ simplest of the SPICE analysis options - basic DC operating point
 analysis.  Also how to draw basic schematics, display voltages and
 current on your schematic, and a beginner few traps to avoid."
 https://www.youtube.com/watch?v=FEGT5dUpdrc
+
+** NGSPICE 
+*** issues
+**** [2019-08-26 Mon 10:17] !! MATRIX IS NEARLY SINGULAR  [SOLVED]
+ page 229 of the ngspice manual, section 15.1.2.1, Matrix
+Conditioning Info.
+
+"If you should encounter a “no DC path to ground” or a “matrix is
+nearly singular” error message with your circuit, you should try
+adding the following .option card to your circuit description deck.
+
+.option rshunt = 1.0e12"
+
+
+
+****** schematic.js
+V__8 n1 n0 DC 1
+
+G1 0 n2 n1 n0 1.25
+R__6 n2 n3 1
+R__4 n3 0 1
+
+.option rshunt = 1.0e12
+.op
+.control
+tran 1ms 1s uic
+echo "start delimeter n1"
+print v(n1)
+.end
+
 
 ** The NGSpice input deck - Simulation Series Part Four
 https://www.youtube.com/watch?v=nwPdDcDthuM
