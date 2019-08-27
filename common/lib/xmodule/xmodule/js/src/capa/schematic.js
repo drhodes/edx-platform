@@ -13,6 +13,10 @@
 // for modified nodal analysis (MNA) stamps see
 // https://web.archive.org/web/20160421095602/http://www.analog-electronics.eu/analog-electronics/modified-nodal-analysis/modified-nodal-analysis.xhtml
 
+function nanp(x) {
+    //if (x !== x) throw 'found a NaN!';
+}
+
 var cktsim = (function() {
     ///////////////////////////////////////////////////////////////////////////////
     //
@@ -184,7 +188,7 @@ var cktsim = (function() {
             else if (type == 'i')
                 // current source
                 this.i(connections[0], connections[1], properties['value'], name);
-            else if (type == 'vccs')
+            else if (type == 'vccs') {
                 // voltage controlled current source
                 this.vccs(
                     connections[0],
@@ -194,7 +198,7 @@ var cktsim = (function() {
                     properties['conductance'],
                     name
                 );
-            else if (type == 'o')
+            } else if (type == 'o')
                 // op amp
                 this.opamp(
                     connections[0],
@@ -276,13 +280,6 @@ var cktsim = (function() {
                 connections[j] = index;
             }
 
-            // ngspice uses 0 for gnd.
-            // for (var i = 0; i < connections.length; i++) {
-            //     if (connections[i] == -1) {
-            //         connections[i] = 0;
-            //     }
-            // }
-
             let cin = connections[0] == this.gnd_node() ? '0' : 'n' + connections[0];
             let cout = connections[1] == this.gnd_node() ? '0' : 'n' + connections[1];
 
@@ -353,16 +350,6 @@ var cktsim = (function() {
                 // General form: GlXXXXXXX N+ N- NC+ NC- VALUE
                 let G = properties['conductance'];
                 spice.push(`G1 ${c0} ${c1} ${c2} ${c3} ${G}`);
-                // voltage controlled current source
-                // TODO confingure these connections appropriately.
-                // this.vccs(
-                //     connections[0],
-                //     connections[1],
-                //     connections[2],
-                //     connections[3],
-                //     properties['conductance'],
-                //     name
-                // );
             } else if (type == 'o') {
                 // op amp
                 // this.opamp(
@@ -445,7 +432,6 @@ var cktsim = (function() {
 
             // Update the worst case abssum for comparison.
             if (iter == 0 || abssum_rhs > abssum_compare) abssum_compare = abssum_rhs;
-
             // Check residue convergence, but loosely, and give up
             // on last iteration
             if (iter < maxiters - 1 && abssum_rhs > res_check_abs + res_check_rel * abssum_compare)
@@ -490,7 +476,9 @@ var cktsim = (function() {
             // G matrix is initialized with linear Gl
             mat_copy(ckt.Gl, ckt.G);
             // Now load up the nonlinear parts of rhs and G
-            for (var i = ckt.devices.length - 1; i >= 0; --i) ckt.devices[i].load_dc(ckt, soln, rhs);
+            for (var i = ckt.devices.length - 1; i >= 0; --i) {
+                ckt.devices[i].load_dc(ckt, soln, rhs);
+            }
             // G matrix is copied in to the system matrix
             mat_copy(ckt.G, ckt.matrix);
         }
@@ -529,9 +517,8 @@ var cktsim = (function() {
     };
 
     // Transient analysis (needs work!)
+    // ntpts: number of time points.
     Circuit.prototype.tran = function(ntpts, tstart, tstop, probenames /*, no_dc */) {
-        // ntpts: number of time points.
-
         // no_dc: this argument appears not to be
         // necessary. because its first occurrance is assigned false.
 
@@ -1094,7 +1081,7 @@ var cktsim = (function() {
     }
 
     // Form b = scale*Mx
-    function mat_v_mult(M, x, b, scale) {
+    function mat_v_mult(M, x, b /*out*/, scale) {
         var n = M.length;
         var m = M[0].length;
 
@@ -1108,7 +1095,7 @@ var cktsim = (function() {
     }
 
     // C = scalea*A + scaleb*B, scalea, scaleb eithers numbers or arrays (row scaling)
-    function mat_scale_add(A, B, scalea, scaleb, C) {
+    function mat_scale_add(A, B, scalea, scaleb, C /*out*/) {
         var n = A.length;
         var m = A[0].length;
 
@@ -1156,7 +1143,11 @@ var cktsim = (function() {
         var m = src[0].length;
         if (n > dest.length || m > dest[0].length) throw 'Rows or cols > rows or cols of dest';
 
-        for (var i = 0; i < n; i++) for (var j = 0; j < m; j++) dest[i][j] = src[i][j];
+        for (var i = 0; i < n; i++) {
+            for (var j = 0; j < m; j++) {
+                dest[i][j] = src[i][j];
+            }
+        }
     }
     // Copy and transpose A -> using the bounds of A
     function mat_copy_transposed(src, dest) {
@@ -1251,8 +1242,9 @@ var cktsim = (function() {
                     var col = Nc - 2;
                     col >= 0;
                     --col // Last col=rhs
-                )
+                ) {
                     sumsq += Mr[col] * Mr[col];
+                }
                 if (row == rowp || sumsq > maxsumsq) {
                     max_row = rowp;
                     maxsumsq = sumsq;
@@ -1910,7 +1902,23 @@ var cktsim = (function() {
     };
 
     VCCSource.prototype.load_dc = function(ckt, soln, rhs) {
-        let dv = soln[this.vpos] - soln[this.vneg];
+        // START CONSTRUCTION
+        //
+
+        // this.vneg is -1, meaning ground, which is causing dv to equal NaN.??
+        //var svp = this.vpos == -1 ? 0 : soln[this.vpos];
+        var svp = this.vpos == -1 ? 0 : soln[this.vpos];
+        var svn = this.vneg == -1 ? 0 : soln[this.vneg];
+        let dv = svp - svn;
+        nanp(dv);
+
+        // if (dv !== dv) {
+        //     // this assumes ground is zero, which may not be correct,
+        //     // when this.vneg or this.vpos is -1 does that always indicate ground?
+        //     dv = soln[this.vpos];
+        // }
+
+        // END CONSTRUCTION
         const conductance = parseFloat(this.v);
         ckt.add_to_rhs(this.ipos, -dv * conductance, rhs); // current flow into ipos
         ckt.add_to_rhs(this.ineg, dv * conductance, rhs); // and out of ineg
